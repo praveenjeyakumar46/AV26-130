@@ -136,9 +136,15 @@ class LegalSectionMatcherOptimized:
                                     if len(relevant_sections) >= limit:
                                         return relevant_sections
         
-        # 4. Fallback: Search in knowledge base (SLOWER - only if needed)
+        # 4. Fallback: Search in knowledge base (semantic first, then keyword)
         if len(relevant_sections) < 3:
-            search_results = self.kb.search_by_keyword(query, limit=10)
+            # Try semantic search to capture conceptually similar sections
+            try:
+                search_results = self.kb.search_semantic(query, limit=10)
+            except Exception as e:
+                print(f"⚠️ Semantic search in matcher failed, falling back to keyword search: {e}")
+                search_results = self.kb.search_by_keyword(query, limit=10)
+
             for result in search_results:
                 source = result.get('source', '')
                 # Only use legal section files

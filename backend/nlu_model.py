@@ -1,11 +1,13 @@
 """
 Enhanced Legal NLU Model - Production Ready
 Combines zero-shot classification with robust entity extraction
+and (optionally) a domain-specific LegalBERT classifier.
 """
 
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+import torch
 
 class LegalNLU:
     def __init__(self, device: int = -1):
@@ -16,12 +18,33 @@ class LegalNLU:
         print("🔄 Loading NLU models...")
         
         try:
-            # Zero-shot classifier for intent detection
+            # Zero-shot classifier for intent detection (general-domain)
             self.classifier = pipeline(
                 "zero-shot-classification",
                 model="facebook/bart-large-mnli",
                 device=device
             )
+            
+            # Optional: domain-specific LegalBERT classifier
+            # NOTE: this expects a sequence-classification checkpoint. If a
+            # compatible checkpoint is not available, loading will fail
+            # gracefully and the rest of the NLU will continue to work.
+            self.legalbert_model_name = "nlpaueb/legal-bert-base-uncased"
+            self.legalbert_tokenizer: Optional[AutoTokenizer] = None
+            self.legalbert_model: Optional[AutoModelForSequenceClassification] = None
+            try:
+                print(f"🔄 Loading LegalBERT classifier: {self.legalbert_model_name} ...")
+                self.legalbert_tokenizer = AutoTokenizer.from_pretrained(self.legalbert_model_name)
+                self.legalbert_model = AutoModelForSequenceClassification.from_pretrained(
+                    self.legalbert_model_name
+                )
+                if device >= 0:
+                    self.legalbert_model.to(device)
+                print("✅ LegalBERT classifier loaded successfully")
+            except Exception as le:
+                print(f"⚠️ Warning: Could not load LegalBERT classifier: {le}")
+                self.legalbert_tokenizer = None
+                self.legalbert_model = None
             
             # Named Entity Recognition
             self.ner = pipeline(
@@ -150,6 +173,37 @@ class LegalNLU:
         
         return list(dict.fromkeys(processed))
     
+    def classify_with_legalbert(self, text: str) -> Optional[Dict[str, Any]]:
+        """Classify text with LegalBERT sequence classifier, if available.
+
+        Returns a dict with `label` and `score`, or None if the classifier
+        is not configured or an error occurs.
+        """
+        if not self.legalbert_model or not self.legalbert_tokenizer:
+            return None
+
+        try:
+            inputs = self.legalbert_tokenizer(
+                text,
+                truncation=True,
+                padding=True,
+                return_tensors="pt",
+            )
+            device = next(self.legalbert_model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+
+            with torch.no_grad():
+                logits = self.legalbert_model(**inputs).logits
+                probs = torch.softmax(logits, dim=-1)[0]
+
+            label_id = int(torch.argmax(probs).item())
+            score = float(probs[label_id].item())
+            label = self.legalbert_model.config.id2label.get(label_id, str(label_id))
+            return {"label": label, "score": score}
+        except Exception as e:
+            print(f"⚠️ LegalBERT classification error: {e}")
+            return None
+
     def analyze(self, text: str) -> Dict[str, Any]:
         """
         Main NLU analysis function
@@ -166,7 +220,7 @@ class LegalNLU:
         
         text = text.strip()
         
-        # 1. Intent Detection
+        # 1. Intent Detection (zero-shot, general-domain)
         intent = "other"
         intent_score = 0.0
         
@@ -181,6 +235,10 @@ class LegalNLU:
                 intent_score = round(intent_result["scores"][0], 3)
             except Exception as e:
                 print(f"⚠️ Intent detection error: {e}")
+        
+        # 1b. Optional LegalBERT classification (does not override base intent
+        # yet; exposed as additional signal)
+        legalbert_result = self.classify_with_legalbert(text)
         
         # 2. Named Entity Recognition
         ner_entities = []
@@ -236,6 +294,8 @@ class LegalNLU:
         result = {
             "intent": intent,
             "intent_confidence": intent_score,
+            "legalbert_intent": legalbert_result.get("label") if legalbert_result else None,
+            "legalbert_confidence": legalbert_result.get("score") if legalbert_result else None,
             "entities": {
                 "persons": regex_entities.get("person", []),
                 "organizations": regex_entities.get("organization", []),

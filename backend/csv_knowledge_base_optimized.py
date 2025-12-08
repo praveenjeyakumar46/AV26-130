@@ -9,7 +9,11 @@ from typing import List, Dict, Any, Optional
 import re
 from pathlib import Path
 import numpy as np
+from numpy.linalg import norm
 from functools import lru_cache
+
+from legal_embeddings import get_embedding_model
+
 
 class CSVKnowledgeBaseOptimized:
     def __init__(self, csv_directory: str = "data"):
@@ -21,8 +25,14 @@ class CSVKnowledgeBaseOptimized:
         self.csv_dir = Path(csv_directory)
         self.dataframes: Dict[str, pd.DataFrame] = {}
         self.search_indices: Dict[str, Dict[str, pd.DataFrame]] = {}  # Pre-computed search indices
+        # Semantic embeddings per file: file_name -> (N, D) float32 array
+        self.embeddings: Dict[str, np.ndarray] = {}
+        # Shared LegalBERT embedding model
+        self._embedding_model = get_embedding_model()
+
         self.load_csv_files()
         self._build_search_indices()
+        self._build_semantic_indices()
     
     def load_csv_files(self):
         """Load all CSV files from the data directory"""
@@ -72,7 +82,44 @@ class CSVKnowledgeBaseOptimized:
             self.search_indices[file_name] = indices
         
         print(f"✅ Search indices built for {len(self.search_indices)} files")
-    
+
+    def _build_semantic_indices(self) -> None:
+        """Build LegalBERT-based embeddings for semantic search.
+
+        For each CSV with legal section-like columns, we create one
+        embedding per row based on a concatenation of important fields.
+        Fails gracefully if the embedding model is unavailable.
+        """
+        if not self.dataframes:
+            return
+
+        # If embedding model failed to load, skip silently.
+        if not getattr(self._embedding_model, "model", None):
+            print("⚠️ Skipping semantic index build: LegalBERT embedding model not available")
+            return
+
+        print("🔨 Building semantic indices with LegalBERT embeddings...")
+        for file_name, df in self.dataframes.items():
+            # Heuristic: only build for typical legal-sections files
+            if not {"Section", "Title", "Description"}.issubset(df.columns):
+                continue
+
+            try:
+                texts = (
+                    df["Section"].fillna("")
+                    + " "
+                    + df["Title"].fillna("")
+                    + " "
+                    + df["Description"].fillna("")
+                ).tolist()
+                embs = self._embedding_model.encode(texts)
+                if embs.size == 0:
+                    continue
+                self.embeddings[file_name] = embs.astype(np.float32)
+                print(f"✅ Semantic index built for {file_name} ({embs.shape[0]} rows)")
+            except Exception as e:
+                print(f"⚠️ Semantic index build failed for {file_name}: {e}")
+
     @lru_cache(maxsize=100)
     def _cached_keyword_search(self, keyword: str, file_name: str, limit: int) -> tuple:
         """Cached search for frequently used keywords"""
@@ -96,9 +143,10 @@ class CSVKnowledgeBaseOptimized:
         return tuple(results)
     
     def search_by_keyword(self, keyword: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        OPTIMIZED: Search across all CSV files for a keyword
-        Uses pre-built indices and caching for faster results
+        """Keyword-based search across all CSV files.
+
+        This is the existing optimized string-search that uses
+        the `_search_text` column and an LRU cache.
         """
         results = []
         keyword_lower = keyword.lower()
@@ -126,6 +174,64 @@ class CSVKnowledgeBaseOptimized:
                 break
         
         return results[:limit]
+
+    def search_semantic(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Semantic search using LegalBERT embeddings and cosine similarity.
+
+        Returns a list of result dicts similar to `search_by_keyword`, but
+        additionally includes a `score` field for each result.
+        """
+        query = (query or "").strip()
+        if not query:
+            return []
+
+        # If no semantic indices or model, fall back to keyword search
+        if not self.embeddings or not getattr(self._embedding_model, "model", None):
+            return self.search_by_keyword(query, limit=limit)
+
+        try:
+            q_emb = self._embedding_model.encode([query])[0]
+        except Exception as e:
+            print(f"⚠️ Semantic search encoding failed, falling back to keyword search: {e}")
+            return self.search_by_keyword(query, limit=limit)
+
+        if q_emb.ndim != 1:
+            q_emb = q_emb.reshape(-1)
+        q_emb = q_emb / (norm(q_emb) + 1e-8)
+
+        all_results: List[Dict[str, Any]] = []
+        for file_name, embs in self.embeddings.items():
+            if embs.size == 0:
+                continue
+            # Normalize row embeddings
+            denom = norm(embs, axis=1, keepdims=True) + 1e-8
+            e_norm = embs / denom
+            scores = e_norm @ q_emb  # (N,)
+
+            # Top indices for this file
+            top_idx = np.argsort(-scores)[:limit]
+            df = self.dataframes[file_name].iloc[top_idx]
+
+            for idx, score in zip(top_idx, scores[top_idx]):
+                row = df.loc[df.index == idx].iloc[0].to_dict()
+                row.pop("_search_text", None)
+                row.pop("_section_key", None)
+                cleaned = {
+                    k: (None if v == "" or pd.isna(v) else v)
+                    for k, v in row.items()
+                }
+                all_results.append(
+                    {
+                        "source": file_name,
+                        "matched_column": "semantic",
+                        "score": float(score),
+                        "data": cleaned,
+                    }
+                )
+
+        # Global top-k across all files
+        all_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        return all_results[:limit]
     
     def search_by_section_number(self, section_number: str) -> Optional[Dict[str, Any]]:
         """

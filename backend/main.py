@@ -50,6 +50,14 @@ except Exception as e:
     print(f"⚠️ general_conversation: {e}")
     handle_general_conversation = None
 
+# Optional BiLSTM-GRU case type classifier
+try:
+    from case_type_model import get_case_type_classifier
+    _case_classifier_available = True
+except Exception as e:
+    print(f"⚠️ case_type_model: {e}")
+    _case_classifier_available = False
+
 app = FastAPI(title="Legal AI Assistant API")
 
 app.add_middleware(
@@ -521,7 +529,12 @@ def answer_from_knowledge_base(query: str, language: str = 'en') -> Optional[Dic
         kb = get_knowledge_base()
         
         legal_sections = matcher.get_relevant_sections(query=query, limit=5)
-        results = kb.search_by_keyword(query, limit=3)
+        # Prefer semantic search for answers; fall back to keyword search.
+        try:
+            results = kb.search_semantic(query, limit=3)
+        except Exception as e:
+            print(f"⚠️ Semantic KB search failed, falling back to keyword search: {e}")
+            results = kb.search_by_keyword(query, limit=3)
         
         if results:
             data = results[0].get('data', {})
@@ -677,7 +690,25 @@ async def api_chat_complete(request: dict):
         # Classify case type intelligently
         case_type = "Civil"
         text_lower = text_str.lower()
+
+        # Try optional BiLSTM-GRU classifier first (if available)
+        case_type_model_label = None
+        case_type_model_score = None
+        if _case_classifier_available:
+            try:
+                classifier = get_case_type_classifier()
+                pred = classifier.predict(text_str)
+                if pred:
+                    case_type_model_label = pred.get("label")
+                    case_type_model_score = pred.get("score")
+            except Exception as e:
+                print(f"⚠️ CaseTypeClassifier prediction error: {e}")
         
+        # If the model is confident, we can use it as a strong hint,
+        # but still let the heuristic logic refine if needed.
+        if case_type_model_label and case_type_model_score and case_type_model_score >= 0.7:
+            case_type = case_type_model_label
+
         # Check for specific acts mentioned - these are definitive
         has_ipc = 'ipc' in text_lower or 'indian penal code' in text_lower
         has_crpc = 'crpc' in text_lower or 'criminal procedure code' in text_lower
@@ -766,8 +797,9 @@ CRITICAL INSTRUCTIONS:
    - Provide comprehensive information about the section
    - Include related sections if applicable
    - Provide step-by-step guidance on how to file complaints
-7. Be comprehensive, detailed, and specific. Reference actual facts from the user's query
-8. Follow the EXACT format below. Do not deviate.
+7. Do NOT repeat the same "Step X:" line or paragraph. Each step number must appear only once and with unique content.
+8. Be comprehensive, detailed, and specific. Reference actual facts from the user's query
+9. Follow the EXACT format below. Do not deviate.
 
 REQUIRED FORMAT (Follow EXACTLY - Start your response with this):
 
@@ -883,6 +915,10 @@ IMPORTANT:
             ]
             for pattern in instruction_patterns:
                 a_resp = re.sub(pattern, '', a_resp, flags=re.IGNORECASE | re.MULTILINE)
+            
+            # Deduplicate accidentally repeated step lines like
+            # "Step 1: ... Step 1: ..." that some models may produce.
+            a_resp = re.sub(r'(Step\s+\d+:[^\n]+?)(?:\s*\1)+', r'\1', a_resp)
             
             # Clean up multiple newlines that might result from removals
             a_resp = re.sub(r'\n{3,}', '\n\n', a_resp)

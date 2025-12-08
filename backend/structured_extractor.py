@@ -5,8 +5,12 @@ Extracts legal information in organized key-value pairs
 
 import re
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
+
 import ollama
+
+from long_summarizer import get_long_summarizer
+
 
 class StructuredLegalExtractor:
     def __init__(self):
@@ -183,11 +187,24 @@ Provide ONLY the summary, no additional formatting or labels."""
             return f"Summary generation failed: {str(e)}"
     
     def extract_and_summarize(self, text: str) -> Dict[str, Any]:
-        """
-        Complete extraction with summary
+        """Complete extraction with summary.
+
+        Uses Longformer for very long texts, and falls back to the
+        existing Mistral-based summarizer for shorter ones.
         """
         structured_data = self.extract_structured_data(text)
-        summary = self.generate_summary_with_llm(text, structured_data)
+
+        # Heuristic: use Longformer for long documents
+        text_str = text or ""
+        if len(text_str) > 4000:
+            try:
+                summarizer = get_long_summarizer()
+                summary = summarizer.summarize(text_str)
+            except Exception as e:
+                print(f"⚠️ Longformer summarization failed, falling back to Mistral: {e}")
+                summary = self.generate_summary_with_llm(text_str, structured_data)
+        else:
+            summary = self.generate_summary_with_llm(text_str, structured_data)
         
         return {
             'summary': summary,

@@ -16,6 +16,7 @@ torch>=2.0.0
 transformers>=4.35.0
 datasets>=2.14.0
 sentencepiece>=0.1.99
+sentence-transformers>=2.2.0
 
 # Model Fine-tuning (LoRA/PEFT)
 peft>=0.6.0
