@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPaperPlane, faPaperclip, faMicrophone, faRobot, faUser, faCircle, faTimes } from '@fortawesome/free-solid-svg-icons';
+import {
+  Send, Paperclip, Mic, Bot, User, Plus, Trash2, X,
+  Scale, MessageSquare, Clock, ChevronRight, Sparkles,
+  AlertCircle, Wifi, WifiOff, Loader2,
+} from 'lucide-react';
 import { checkHealth } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 
+/* ─── Types ───────────────────────────────────────────────────────────── */
 interface Message {
   id: string;
   role: 'user' | 'bot';
@@ -11,631 +16,661 @@ interface Message {
   timestamp: string;
   type?: 'text' | 'summary' | 'keywords' | 'answer' | 'legal_sections';
   legalSections?: LegalSection[];
-  summary?: string;
-  structuredKeywords?: Record<string, string>;
 }
-
 interface LegalSection {
-  section: string;
-  title: string;
-  description: string;
-  punishment: string;
-  act: string;
-  bailable: string;
-  cognizable: string;
+  section: string; title: string; description: string;
+  punishment: string; act: string; bailable: string; cognizable: string;
+}
+interface StoredConversation {
+  id: string; title: string; timestamp: number;
+  updatedAt: number; messageCount: number; preview: string;
 }
 
-interface KeywordItem {
-  label: string;
-  value: string;
-}
+/* ─── Storage keys ────────────────────────────────────────────────────── */
+const CHAT_KEY   = 'legal_ai_chat_history';
+const STATE_KEY  = 'legal_ai_chat_state';
+const CONVS_KEY  = 'legal_ai_conversations';
+const CUR_ID_KEY = 'legal_ai_current_conversation_id';
 
+/* ─── Helpers ─────────────────────────────────────────────────────────── */
+const loadConversations = (): StoredConversation[] => {
+  try {
+    const s = localStorage.getItem(CONVS_KEY);
+    if (s) return JSON.parse(s)
+      .sort((a: StoredConversation, b: StoredConversation) =>
+        (b.updatedAt || b.timestamp) - (a.updatedAt || a.timestamp))
+      .slice(0, 20);
+  } catch {}
+  return [];
+};
+
+const timeAgo = (ts: number) => {
+  const d = Date.now() - ts, s = d / 1000, m = s / 60, h = m / 60, day = h / 24;
+  if (day >= 1) return `${Math.floor(day)}d ago`;
+  if (h   >= 1) return `${Math.floor(h)}h ago`;
+  if (m   >= 1) return `${Math.floor(m)}m ago`;
+  return 'Just now';
+};
+
+/* ─── Suggested prompts ───────────────────────────────────────────────── */
+const SUGGESTIONS = [
+  'What are my rights as a tenant?',
+  'How to file a consumer complaint?',
+  'Explain Section 498A IPC',
+  'Legal process for property registration?',
+  'What are workplace harassment laws?',
+  'How to file an FIR?',
+  'Contract review procedure?',
+  'Documents for a property dispute?',
+];
+
+/* ════════════════════════════════════════════════════════════════════════
+   Component
+════════════════════════════════════════════════════════════════════════ */
 const Chatbot = () => {
-  const { t } = useTranslation('common');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'bot',
-      content: t('chatbot.welcome'),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'text'
-    },
-  ]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [isConnected, setIsConnected] = useState<boolean | null>(null);
-  const [isFirstInput, setIsFirstInput] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { t, i18n: i18nHook } = useTranslation('common');
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  /* ── Load helpers ─────────────────────────────────────────────────── */
+  const loadConvMsgs = (id: string): Message[] | null => {
+    try {
+      const s = localStorage.getItem(`conv_messages_${id}`);
+      if (s) {
+        const msgs = JSON.parse(s).filter((m: Message) => m.content || m.type === 'legal_sections');
+        if (msgs.length) return msgs;
+      }
+    } catch {}
+    return null;
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const loadCurId = (): string | null => {
+    try { return sessionStorage.getItem(CUR_ID_KEY) || null; } catch { return null; }
+  };
 
-  // Check backend connection on mount
+  const welcomeMsg = (): Message => ({
+    id: '1', role: 'bot', type: 'text',
+    content: t('chatbot.welcome'),
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  });
+
+  const loadMsgs = (): Message[] => {
+    const cid = loadCurId();
+    if (cid) { const m = loadConvMsgs(cid); if (m) return m; }
+    try {
+      const s = sessionStorage.getItem(CHAT_KEY);
+      if (s) { const m = JSON.parse(s).filter((x: Message) => x.content || x.type === 'legal_sections'); if (m.length) return m; }
+    } catch {}
+    return [welcomeMsg()];
+  };
+
+  const loadFirstInput = (): boolean => {
+    try {
+      const s = sessionStorage.getItem(STATE_KEY);
+      if (s) return JSON.parse(s).isFirstInput ?? true;
+    } catch {}
+    return true;
+  };
+
+  /* ── State ────────────────────────────────────────────────────────── */
+  const [messages,           setMessages]           = useState<Message[]>(loadMsgs);
+  const [input,              setInput]              = useState('');
+  const [isTyping,           setIsTyping]           = useState(false);
+  const [isConnected,        setIsConnected]        = useState<boolean | null>(null);
+  const [currentDocumentId,  setCurrentDocumentId]  = useState<string | null>(null);
+  const [conversations,      setConversations]      = useState<StoredConversation[]>(loadConversations);
+  const [currentConvId,      setCurrentConvId]      = useState<string | null>(loadCurId);
+  const [isFirstInput,       setIsFirstInput]       = useState(loadFirstInput);
+  const [sidebarOpen,        setSidebarOpen]        = useState(true);
+
+  const messagesEndRef    = useRef<HTMLDivElement>(null);
+  const abortRef          = useRef<AbortController | null>(null);
+  const textareaRef       = useRef<HTMLTextAreaElement>(null);
+
+  /* ── Effects ──────────────────────────────────────────────────────── */
   useEffect(() => {
-    const checkConnection = async () => {
-      const healthy = await checkHealth();
-      setIsConnected(healthy);
-      if (!healthy) {
-        const errorMessage: Message = {
-          id: 'connection-error',
-          role: 'bot',
-          content: '⚠️ Unable to connect to the backend server. Please ensure the backend is running on http://localhost:8000',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          type: 'text'
-        };
-        setMessages((prev) => [...prev, errorMessage]);
-      }
-    };
-    checkConnection();
+    const p = sessionStorage.getItem('chatbot_prefill');
+    if (p) { sessionStorage.removeItem('chatbot_prefill'); setInput(p); }
   }, []);
 
-  const conversations = [
-    { title: 'Property Dispute Query', time: '2 hours ago' },
-    { title: 'Employment Law Question', time: 'Yesterday' },
-    { title: 'Contract Review Help', time: '2 days ago' },
-    { title: 'Family Law Consultation', time: '1 week ago' },
-  ];
+  useEffect(() => {
+    if (messages.length === 1 && messages[0].id === '1')
+      setMessages([welcomeMsg()]);
+  }, [i18nHook.language]);
 
-  const suggestedQuestions = [
-    'What are my rights as a tenant?',
-    'How to file a consumer complaint?',
-    'Explain Section 498A IPC',
-    'What is the legal process for property registration?',
-    'What are workplace harassment laws?',
-    'How to file an FIR (First Information Report)?',
-    'Explain the legal procedure for contract review',
-    'What documents do I need for a property dispute?',
-  ];
+  useEffect(() => {
+    if (currentConvId) sessionStorage.setItem(CUR_ID_KEY, currentConvId);
+    else               sessionStorage.removeItem(CUR_ID_KEY);
+  }, [currentConvId]);
 
-  const renderKeywords = (keywords: KeywordItem[]) => {
-    if (!keywords || keywords.length === 0) return null;
+  useEffect(() => {
+    try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(messages)); } catch {}
+    const userMsgs = messages.filter(m => m.role === 'user' && m.type === 'text');
+    if (!userMsgs.length) return;
+    const title = userMsgs[0].content.length > 50
+      ? userMsgs[0].content.slice(0, 50) + '…'
+      : userMsgs[0].content;
+    let cid = currentConvId ?? `conv_${Date.now()}`;
+    if (!currentConvId) setCurrentConvId(cid);
+    try { localStorage.setItem(`conv_messages_${cid}`, JSON.stringify(messages)); } catch {}
+    let existing: StoredConversation | undefined;
+    try {
+      const s = localStorage.getItem(CONVS_KEY);
+      if (s) existing = JSON.parse(s).find((c: StoredConversation) => c.id === cid);
+    } catch {}
+    const preview = [...messages].reverse().find(m => m.role === 'bot')?.content?.slice(0, 100) || '';
+    const conv: StoredConversation = {
+      id: cid, title,
+      timestamp: existing?.timestamp ?? Date.now(),
+      updatedAt: Date.now(),
+      messageCount: messages.length, preview,
+    };
+    setConversations(prev => {
+      const updated = [conv, ...prev.filter(c => c.id !== cid)]
+        .sort((a, b) => (b.updatedAt || b.timestamp) - (a.updatedAt || a.timestamp))
+        .slice(0, 20);
+      try { localStorage.setItem(CONVS_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, [messages, currentConvId]);
 
-    // Group keywords by priority
-    const priority = ['Reporter', 'Victim', 'Suspect', 'Witness'];
-    const times = ['Time of incident', 'Time when victim was found', 'Visitor time', 'Time'];
-    
-    const priorityKeywords = keywords.filter(k => priority.includes(k.label));
-    const timeKeywords = keywords.filter(k => times.includes(k.label));
-    const otherKeywords = keywords.filter(k => 
-      !priority.includes(k.label) && !times.includes(k.label)
-    );
+  useEffect(() => {
+    try { sessionStorage.setItem(STATE_KEY, JSON.stringify({ isFirstInput })); } catch {}
+  }, [isFirstInput]);
 
-    const orderedKeywords = [...priorityKeywords, ...timeKeywords, ...otherKeywords];
+  useEffect(() => { return () => { abortRef.current?.abort(); }; }, []);
 
-    return (
-      <div className="space-y-2 mt-2">
-        {orderedKeywords.map((kw, idx) => (
-          <div 
-            key={idx} 
-            className="flex items-start space-x-2 bg-primary/5 p-2 rounded-lg hover:bg-primary/10 transition-colors duration-200"
-          >
-            <span className="font-bold text-primary text-sm min-w-[140px]">{kw.label}:</span>
-            <span className="text-foreground text-sm flex-1">{kw.value}</span>
-          </div>
-        ))}
-      </div>
-    );
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    const check = async () => {
+      try { setIsConnected(await checkHealth()); } catch { setIsConnected(false); }
+    };
+    check();
+    const iv = setInterval(() => { if (!isConnected) check(); }, 15000);
+    return () => clearInterval(iv);
+  }, [isConnected]);
+
+  /* auto-grow textarea */
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+  }, [input]);
+
+  /* ── Conversation actions ─────────────────────────────────────────── */
+  const startNew = () => {
+    setMessages([welcomeMsg()]);
+    setCurrentConvId(null);
+    setIsFirstInput(true);
+    setCurrentDocumentId(null);
+    setInput('');
+    sessionStorage.removeItem(CUR_ID_KEY);
+    sessionStorage.removeItem(CHAT_KEY);
   };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const loadConv = (conv: StoredConversation) => {
+    const msgs = loadConvMsgs(conv.id);
+    if (msgs?.length) {
+      setMessages(msgs);
+      setCurrentConvId(conv.id);
+      setIsFirstInput(!msgs.some(m => m.role === 'user' && m.type === 'text'));
+    } else {
+      setMessages([welcomeMsg()]);
+      setCurrentConvId(conv.id);
+      setIsFirstInput(true);
+    }
+    setCurrentDocumentId(null);
+    setInput('');
+  };
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
+  const deleteConv = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(t('chatbot.confirmDelete'))) return;
+    try { localStorage.removeItem(`conv_messages_${id}`); } catch {}
+    setConversations(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      try { localStorage.setItem(CONVS_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    if (currentConvId === id) startNew();
+  };
+
+  /* ── Send ─────────────────────────────────────────────────────────── */
+  const handleSend = async () => {
+    if (!input.trim() || isTyping) return;
+    if (isConnected === false) {
+      setMessages(p => [...p, {
+        id: `${Date.now()}-err`, role: 'bot', type: 'text',
+        content: '⚠️ Cannot reach the backend. Check the server is running.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
+      return;
+    }
+    abortRef.current?.abort();
+    const userMsg: Message = {
+      id: Date.now().toString(), role: 'user', type: 'text',
       content: input,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: 'text'
     };
-
-    setMessages((prev) => [...prev, userMessage]);
-    const currentInput = input;
+    setMessages(p => [...p, userMsg]);
+    const cur = input;
     setInput('');
     setIsTyping(true);
-
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
-      const response = await fetch('http://localhost:8000/api/chat/complete', {
+      const history = messages
+        .filter(m => m.type === 'text' || m.type === 'answer').slice(-10)
+        .map(m => ({ role: m.role === 'user' ? 'user' : 'bot', content: m.content || '' }));
+      const base = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
+      const res = await fetch(`${base}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: currentInput, 
-          language: navigator.language?.startsWith('ta') ? 'ta' : 'en',
-          is_first_input: isFirstInput
-        })
+        body: JSON.stringify({ text: cur, language: i18n.language || 'en',
+          is_first_input: isFirstInput, conversation_history: history,
+          document_id: currentDocumentId }),
+        signal: ctrl.signal,
       });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.success) {
-        const isIncidentReport = data.query_type === 'incident_report';
-        
-        // 1. Show SUMMARY first (for incident reports on first input)
-        if (isIncidentReport && isFirstInput && data.summary) {
-          const summaryMessage: Message = {
-            id: `${Date.now()}-summary`,
-            role: 'bot',
-            content: data.summary,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'summary'
-          };
-          setMessages(prev => [...prev, summaryMessage]);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No response body');
+      const dec = new TextDecoder();
+      let answerId = '';
+      let buf = '';
+      while (true) {
+        if (ctrl.signal.aborted) { reader.cancel(); break; }
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const d = JSON.parse(line.slice(6));
+            if (d.type === 'summary') {
+              setMessages(p => [...p, {
+                id: `${Date.now()}-sum`, role: 'bot', type: 'summary',
+                content: d.content,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              }]);
+            } else if (d.type === 'legal_sections') {
+              setMessages(p => [...p, {
+                id: `${Date.now()}-ls`, role: 'bot', type: 'legal_sections',
+                content: '', legalSections: d.sections,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              }]);
+            } else if (d.type === 'start') {
+              answerId = `${Date.now()}-ans`;
+              setMessages(p => [...p, {
+                id: answerId, role: 'bot', type: 'answer', content: '',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              }]);
+              setIsTyping(false);
+            } else if (d.type === 'chunk') {
+              setMessages(p => p.map(m => m.id === answerId ? { ...m, content: m.content + d.content } : m));
+            } else if (d.type === 'complete') {
+              if (isFirstInput) setIsFirstInput(false);
+              setIsConnected(true);
+            } else if (d.type === 'error') throw new Error(d.content || 'Streaming error');
+          } catch {}
         }
-        
-        // 2. Keywords are now only logged in backend, NOT displayed in frontend
-        // (Removed keyword display section)
-
-        // 3. Show legal sections if available
-        if (data.legal_sections && data.legal_sections.length > 0) {
-          setTimeout(() => {
-            const legalSectionsMessage: Message = {
-              id: `${Date.now()}-legal-sections`,
-              role: 'bot',
-              content: '',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              type: 'legal_sections',
-              legalSections: data.legal_sections
-            };
-            setMessages(prev => [...prev, legalSectionsMessage]);
-          }, 300);
-        }
-
-        // 4. Show the detailed answer (includes case type classification)
-        if (data.answer) {
-          setTimeout(() => {
-            const answerMessage: Message = {
-              id: `${Date.now()}-answer`,
-              role: 'bot',
-              content: data.answer,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              type: 'answer'
-            };
-            setMessages(prev => [...prev, answerMessage]);
-          }, 500);
-        }
-
-        // Mark that first input is done
-        if (isFirstInput) {
-          setIsFirstInput(false);
-        }
-
-        setIsConnected(true);
-      } else {
-        throw new Error(data.error || 'Server returned unsuccessful response');
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      const errorMessage: Message = {
-        id: `${Date.now()}-error`,
-        role: 'bot',
-        content: error instanceof Error
-          ? `⚠️ ${error.message}`
-          : 'Sorry, I encountered an error while processing your request. Please check that the backend server is running and try again.',
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      setMessages(p => [...p, {
+        id: `${Date.now()}-err`, role: 'bot', type: 'text',
+        content: err instanceof Error ? `⚠️ ${err.message}` : 'An error occurred.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        type: 'text'
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      }]);
       setIsConnected(false);
     } finally {
       setIsTyping(false);
+      abortRef.current = null;
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  /* ── File upload ──────────────────────────────────────────────────── */
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-
-    // Check file type
-    const allowedTypes = ['.pdf', '.docx', '.doc', '.txt'];
-    const fileExt = '.' + file.name.split('.').pop()?.toLowerCase();
-    if (!allowedTypes.includes(fileExt)) {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!['.pdf', '.docx', '.doc', '.txt'].includes(ext)) {
       alert('Please upload a PDF, DOCX, DOC, or TXT file');
       return;
     }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('language', navigator.language?.startsWith('ta') ? 'ta' : 'en');
-
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('language', i18n.language || 'en');
     setIsTyping(true);
-
     try {
-      const response = await fetch('http://localhost:8000/api/upload/document', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const data = await response.json();
-
+      const base = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
+      const res  = await fetch(`${base}/api/upload/document`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       if (data.success) {
-        // Show uploaded file info
-        const fileMessage: Message = {
-          id: `${Date.now()}-file`,
-          role: 'user',
-          content: `📄 Uploaded: ${data.filename}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          type: 'text'
-        };
-        setMessages(prev => [...prev, fileMessage]);
-
-        // Show summary
-        if (data.summary) {
-          const summaryMessage: Message = {
-            id: `${Date.now()}-summary`,
-            role: 'bot',
-            content: data.summary,
+        if (data.documentId) setCurrentDocumentId(data.documentId);
+        setMessages(p => [...p,
+          { id: `${Date.now()}-f`, role: 'user', type: 'text',
+            content: `📄 ${t('chatbot.documentUploaded')}: ${data.filename}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+          ...(data.summary ? [{
+            id: `${Date.now()}-s`, role: 'bot' as const, type: 'summary' as const,
+            content: `**${t('chatbot.summary')}:** ${data.summary}\n\n💡 ${t('chatbot.askAboutDocument')}`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'summary'
-          };
-          setMessages(prev => [...prev, summaryMessage]);
-        }
-
-        // Keywords are logged in backend only, not displayed in frontend
-
+          }] : []),
+        ]);
         setIsFirstInput(false);
-      } else {
-        throw new Error(data.error || 'Document processing failed');
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      const errorMessage: Message = {
-        id: `${Date.now()}-error`,
-        role: 'bot',
-        content: error instanceof Error
-          ? `⚠️ ${error.message}`
-          : 'Sorry, I encountered an error processing your document.',
+      } else throw new Error(data.error || 'Upload failed');
+    } catch (err) {
+      setMessages(p => [...p, {
+        id: `${Date.now()}-err`, role: 'bot', type: 'text',
+        content: err instanceof Error ? `⚠️ ${err.message}` : 'Upload error.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        type: 'text'
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsTyping(false);
-      // Reset file input
-      event.target.value = '';
-    }
+      }]);
+    } finally { setIsTyping(false); e.target.value = ''; }
   };
 
-  const renderMessageContent = (message: Message) => {
-    switch (message.type) {
-      case 'summary':
-        return (
-          <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 rounded-r-lg">
-            <div className="flex items-center space-x-2 mb-3">
-              <span className="text-xl">📋</span>
-              <span className="font-bold text-blue-700 dark:text-blue-300">Summary</span>
-            </div>
-            <div className="text-foreground whitespace-pre-wrap">{message.content}</div>
-          </div>
-        );
-
-      case 'keywords':
-        // Use structured keywords if available, otherwise fallback to labeled keywords
-        if (message.structuredKeywords && Object.keys(message.structuredKeywords).length > 0) {
-          return (
-            <div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 p-4 rounded-r-lg">
-              <div className="flex items-center space-x-2 mb-3">
-                <span className="text-xl">🔑</span>
-                <span className="font-bold text-green-700 dark:text-green-300">Extracted Information (Key-Value Pairs)</span>
-              </div>
-              <div className="space-y-2 mt-2">
-                {Object.entries(message.structuredKeywords).map(([key, value], idx) => (
-                  <div 
-                    key={idx} 
-                    className="flex items-start space-x-2 bg-primary/5 p-2 rounded-lg hover:bg-primary/10 transition-colors duration-200"
-                  >
-                    <span className="font-bold text-primary text-sm min-w-[180px]">{key}:</span>
-                    <span className="text-foreground text-sm flex-1">{String(value)}</span>
-                  </div>
-                ))}
+  /* ── Render message ───────────────────────────────────────────────── */
+  const renderContent = (msg: Message) => {
+    if (msg.type === 'legal_sections' && msg.legalSections) {
+      return (
+        <div className="space-y-3">
+          {msg.legalSections.map((s, i) => (
+            <div key={i} className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <p className="font-semibold text-primary text-sm">{s.section} – {s.title}</p>
+              <p className="text-xs text-muted-foreground mt-1">{s.act}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-secondary/15 text-secondary px-2 py-0.5">Punishment: {s.punishment}</span>
+                <span className={`rounded-full px-2 py-0.5 ${s.bailable === 'Yes' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>Bailable: {s.bailable}</span>
+                <span className={`rounded-full px-2 py-0.5 ${s.cognizable === 'Yes' ? 'bg-amber-100 text-amber-700' : 'bg-muted text-muted-foreground'}`}>Cognizable: {s.cognizable}</span>
               </div>
             </div>
-          );
-        }
-        
-        // Fallback to labeled keywords
-        try {
-          const keywords: KeywordItem[] = JSON.parse(message.content);
-          return (
-            <div className="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 p-4 rounded-r-lg">
-              <div className="flex items-center space-x-2 mb-3">
-                <span className="text-xl">🔑</span>
-                <span className="font-bold text-green-700 dark:text-green-300">Extracted Keywords</span>
-              </div>
-              {renderKeywords(keywords)}
-            </div>
-          );
-        } catch {
-          return <div className="text-foreground whitespace-pre-wrap">{message.content}</div>;
-        }
-
-      case 'legal_sections':
-        return (
-          <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-4 rounded-r-lg">
-            <div className="flex items-center space-x-2 mb-3">
-              <span className="text-xl">⚖️</span>
-              <span className="font-bold text-blue-700 dark:text-blue-300">Relevant Legal Sections</span>
-            </div>
-            <div className="space-y-4">
-              {message.legalSections?.map((section, idx) => (
-                <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="font-bold text-lg text-blue-700 dark:text-blue-300 mb-2">
-                    {section.section} - {section.title}
-                  </div>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    <span className="font-semibold">Act:</span> {section.act}
-                  </div>
-                  <div className="text-sm mb-3">
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">Description:</span>
-                    <p className="mt-1 text-foreground">{section.description}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400">Punishment:</span>
-                      <p className="mt-1 text-foreground">{section.punishment}</p>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400">Bailable:</span> {section.bailable}<br/>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400">Cognizable:</span> {section.cognizable}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 'answer':
-        return (
-          <div className="bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500 p-4 rounded-r-lg">
-            <div className="flex items-center space-x-2 mb-3">
-              <span className="text-xl">💡</span>
-              <span className="font-bold text-purple-700 dark:text-purple-300">Detailed Analysis</span>
-            </div>
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              {message.content.split('\n').map((line, idx) => {
-                // Handle bold headings (SUMMARY, SECTION 2, SECTION 3, etc.)
-                if (line.match(/^\*\*(.*?)\*\*$/)) {
-                  const heading = line.replace(/\*\*/g, '');
-                  return (
-                    <h3 key={idx} className="font-bold text-lg mt-6 mb-3 text-purple-700 dark:text-purple-300 border-b border-purple-200 dark:border-purple-800 pb-2">
-                      {heading}
-                    </h3>
-                  );
-                }
-                // Handle Step 1:, Step 2: format
-                if (line.match(/^Step\s+\d+:/i)) {
-                  return (
-                    <div key={idx} className="ml-4 mb-3 mt-2">
-                      <strong className="text-purple-600 dark:text-purple-400">{line.match(/^Step\s+\d+:[^:]*/i)?.[0]}</strong>
-                      {line.replace(/^Step\s+\d+:[^:]*:\s*/i, '') && (
-                        <span className="ml-2">{line.replace(/^Step\s+\d+:[^:]*:\s*/i, '')}</span>
-                      )}
-                    </div>
-                  );
-                }
-                // Handle Section [Number] [Act] – [Title] format
-                if (line.match(/^Section\s+\d+/i) && line.includes('–')) {
-                  return (
-                    <div key={idx} className="ml-4 mb-2 mt-3">
-                      <strong className="text-purple-600 dark:text-purple-400">{line}</strong>
-                    </div>
-                  );
-                }
-                // Handle "Reason:" lines
-                if (line.trim().startsWith('Reason:')) {
-                  return (
-                    <div key={idx} className="ml-8 mb-3 italic text-gray-700 dark:text-gray-300">
-                      {line}
-                    </div>
-                  );
-                }
-                // Handle bullet points
-                if (line.trim().startsWith('•')) {
-                  return (
-                    <div key={idx} className="ml-4 mb-2 flex items-start">
-                      <span className="text-purple-500 mr-2">•</span>
-                      <span>{line.trim().substring(1).trim()}</span>
-                    </div>
-                  );
-                }
-                // Handle numbered lists (1., 2., etc.)
-                if (line.match(/^\d+\./)) {
-                  return (
-                    <div key={idx} className="ml-4 mb-2">
-                      {line}
-                    </div>
-                  );
-                }
-                // Regular text
-                return line.trim() ? (
-                  <p key={idx} className="mb-2">{line}</p>
-                ) : (
-                  <br key={idx} />
-                );
-              })}
-            </div>
-          </div>
-        );
-
-      default:
-        return <div className="whitespace-pre-wrap">{message.content}</div>;
+          ))}
+        </div>
+      );
     }
+
+    const cleaned = (msg.content || '').replace(/\*\*/g, '');
+    const paras   = cleaned.split('\n').filter(l => l.trim());
+    return (
+      <div className="space-y-1.5 text-[0.9rem] leading-relaxed text-foreground">
+        {paras.map((p, i) => <p key={i}>{p}</p>)}
+      </div>
+    );
   };
 
+  /* ── Connection badge ─────────────────────────────────────────────── */
+  const ConnBadge = () => {
+    if (isConnected === true)  return <span className="flex items-center gap-1 text-xs text-emerald-600"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Online</span>;
+    if (isConnected === false) return <span className="flex items-center gap-1 text-xs text-red-500"><WifiOff className="w-3 h-3" />Offline</span>;
+    return <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="w-3 h-3 animate-spin" />Connecting…</span>;
+  };
+
+  /* ══════════════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════════════ */
   return (
-    <div className="bg-background flex flex-col pt-16" style={{ height: '100vh', boxSizing: 'border-box' }}>
-      <div className="w-full h-full flex flex-col px-4 py-4">
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-0">
-          {/* Conversations Sidebar */}
-          <div className="lg:col-span-1 bg-card rounded-xl shadow-lg p-4 animate-slide-in-left overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4 text-foreground">Recent Conversations</h2>
-            <div className="space-y-2">
-              {conversations.map((conv, index) => (
-                <div
-                  key={index}
-                  className="p-3 rounded-lg bg-muted/50 hover:bg-muted hover:shadow-md cursor-pointer transition-all duration-300 hover-lift animate-scale-in group"
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <div className="font-semibold text-sm text-foreground mb-1 group-hover:text-primary transition-colors duration-300">{conv.title}</div>
-                  <div className="text-xs text-muted-foreground">{conv.time}</div>
+    <div className="flex h-[calc(100dvh-3.5rem)] md:h-[calc(100vh-4rem)] overflow-hidden bg-background">
+
+      {/* ── Sidebar ─────────────────────────────────────────────────── */}
+      <aside
+        className={`
+          flex-shrink-0 flex flex-col
+          border-r border-border bg-card
+          transition-all duration-300 ease-in-out
+          ${sidebarOpen ? 'w-72' : 'w-0 overflow-hidden border-r-0'}
+        `}
+      >
+        {/* Sidebar header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg gradient-primary flex items-center justify-center">
+              <MessageSquare className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="font-semibold text-sm text-foreground tracking-tight">Conversations</span>
+          </div>
+          <button
+            onClick={startNew}
+            title="New conversation"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Conversation list */}
+        <div className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
+          {conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                <Scale className="w-6 h-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm text-muted-foreground">No conversations yet.</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Start asking a legal question.</p>
+            </div>
+          ) : (
+            conversations.map(conv => (
+              <div
+                key={conv.id}
+                onClick={() => loadConv(conv)}
+                className={`
+                  group relative rounded-xl px-3 py-2.5 cursor-pointer transition-all duration-200
+                  ${currentConvId === conv.id
+                    ? 'bg-primary/10 border border-primary/25'
+                    : 'hover:bg-muted/60 border border-transparent'}
+                `}
+              >
+                <p className={`text-sm font-medium line-clamp-1 pr-6 transition-colors ${currentConvId === conv.id ? 'text-primary' : 'text-foreground group-hover:text-primary'}`}>
+                  {conv.title}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Clock className="w-3 h-3 text-muted-foreground/60" />
+                  <span className="text-xs text-muted-foreground">{timeAgo(conv.updatedAt || conv.timestamp)}</span>
                 </div>
-              ))}
+                {conv.preview && (
+                  <p className="text-xs text-muted-foreground/70 line-clamp-1 mt-0.5 italic">{conv.preview}</p>
+                )}
+                <button
+                  onClick={e => deleteConv(conv.id, e)}
+                  title="Delete"
+                  className="absolute top-2.5 right-2.5 w-5 h-5 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* ── Main chat panel ──────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+        {/* Chat header */}
+        <header className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-card/80 backdrop-blur-sm flex-shrink-0">
+          <div className="flex items-center gap-3">
+            {/* Sidebar toggle */}
+            <button
+              onClick={() => setSidebarOpen(o => !o)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${sidebarOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Avatar */}
+            <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shadow-sm flex-shrink-0">
+              <Scale className="w-4.5 h-4.5 text-white" style={{ width: '1.1rem', height: '1.1rem' }} />
+            </div>
+
+            <div>
+              <h1 className="font-semibold text-sm text-foreground leading-none">{t('chatbot.title')}</h1>
+              <div className="mt-0.5"><ConnBadge /></div>
             </div>
           </div>
 
-          {/* Chat Area */}
-          <div className="lg:col-span-3 bg-card rounded-xl shadow-lg flex flex-col animate-slide-in-right h-full min-h-0">
-            {/* Header */}
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 gradient-primary rounded-full flex items-center justify-center animate-scale-bounce shadow-lg hover:scale-110 transition-transform duration-300">
-                  <FontAwesomeIcon icon={faRobot} className="text-white" />
-                </div>
-                <div>
-                  <div className="font-bold text-foreground">Legal AI Assistant</div>
-                  <div className={`text-sm flex items-center space-x-1 ${
-                    isConnected === true 
-                      ? 'text-success' 
-                      : isConnected === false 
-                      ? 'text-destructive' 
-                      : 'text-muted-foreground'
-                  }`}>
-                    <FontAwesomeIcon 
-                      icon={faCircle} 
-                      className={`text-xs ${
-                        isConnected === true ? 'animate-pulse-glow' : ''
-                      }`} 
-                    />
-                    <span>
-                      {isConnected === true 
-                        ? 'Online' 
-                        : isConnected === false 
-                        ? 'Offline' 
-                        : 'Connecting...'}
-                    </span>
+          {/* Clear button */}
+          {messages.length > 1 && (
+            <button
+              onClick={() => {
+                if (!confirm(t('chatbot.confirmDelete'))) return;
+                sessionStorage.removeItem(CHAT_KEY);
+                sessionStorage.removeItem(STATE_KEY);
+                sessionStorage.removeItem(CUR_ID_KEY);
+                setMessages([welcomeMsg()]);
+                setIsFirstInput(true);
+                setCurrentDocumentId(null);
+                setCurrentConvId(null);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-colors border border-transparent hover:border-destructive/20"
+              title="Clear chat"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Clear</span>
+            </button>
+          )}
+        </header>
+
+        {/* Messages area */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-16 py-6 space-y-6">
+          {messages.map((msg, idx) => (
+            <div
+              key={msg.id}
+              className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+              style={{ animation: 'fadeSlideIn 0.25s ease-out both', animationDelay: `${Math.min(idx * 0.04, 0.3)}s` }}
+            >
+              {/* Avatar */}
+              <div className="flex-shrink-0 mt-0.5">
+                {msg.role === 'bot' ? (
+                  <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center shadow-sm">
+                    <Bot className="w-4 h-4 text-white" />
                   </div>
-                </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-xl bg-secondary flex items-center justify-center shadow-sm">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                )}
+              </div>
+
+              {/* Bubble */}
+              <div className={`flex flex-col max-w-[75%] lg:max-w-[65%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                {msg.role === 'user' ? (
+                  <div className="rounded-2xl rounded-tr-sm px-4 py-3 bg-primary text-white text-sm leading-relaxed shadow-sm">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div className={`rounded-2xl rounded-tl-sm px-4 py-3.5 shadow-sm border
+                    ${msg.type === 'summary'
+                      ? 'bg-amber-50 border-amber-200/70'
+                      : 'bg-card border-border/70'
+                    }`}
+                  >
+                    {renderContent(msg)}
+                  </div>
+                )}
+                <span className="text-[10px] text-muted-foreground/60 mt-1 px-1">{msg.timestamp}</span>
               </div>
             </div>
+          ))}
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((message, index) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-scale-in`}
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <div className={`flex items-start space-x-2 max-w-[85%] group`}>
-                    {message.role === 'bot' && (
-                      <div className="w-8 h-8 gradient-primary rounded-full flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-md">
-                        <FontAwesomeIcon icon={faRobot} className="text-white text-sm" />
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <div
-                        className={`rounded-lg transition-all duration-300 ${
-                          message.role === 'user'
-                            ? 'bg-primary text-white p-3 hover:shadow-glow'
-                            : 'bg-transparent'
-                        }`}
-                      >
-                        {message.role === 'user' ? (
-                          <div className="whitespace-pre-wrap">{message.content}</div>
-                        ) : (
-                          renderMessageContent(message)
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 ml-1">{message.timestamp}</div>
-                    </div>
-                    {message.role === 'user' && (
-                      <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-md">
-                        <FontAwesomeIcon icon={faUser} className="text-white text-sm" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              
-              {isTyping && (
-                <div className="flex items-start space-x-2 animate-slide-in-left">
-                  <div className="w-8 h-8 gradient-primary rounded-full flex items-center justify-center">
-                    <FontAwesomeIcon icon={faRobot} className="text-white text-sm" />
-                  </div>
-                  <div className="bg-muted rounded-lg p-3">
-                    <div className="flex space-x-2">
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Suggested Questions */}
-            {messages.length === 1 && (
-              <div className="px-4 pb-2">
-                <div className="text-sm text-muted-foreground mb-2">Suggested questions:</div>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedQuestions.map((question, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setInput(question)}
-                      className="px-3 py-1.5 bg-muted text-foreground rounded-full text-sm hover:bg-primary hover:text-white hover:scale-105 active:scale-95 transition-all duration-300 animate-scale-in shadow-sm hover:shadow-md"
-                      style={{ animationDelay: `${index * 0.1}s` }}
-                    >
-                      {question}
-                    </button>
+          {/* Typing indicator */}
+          {isTyping && (
+            <div className="flex gap-3" style={{ animation: 'fadeSlideIn 0.2s ease-out' }}>
+              <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center shadow-sm flex-shrink-0">
+                <Bot className="w-4 h-4 text-white" />
+              </div>
+              <div className="rounded-2xl rounded-tl-sm px-4 py-3.5 bg-card border border-border/70 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  {[0, 0.15, 0.3].map((d, i) => (
+                    <span key={i} className="w-2 h-2 rounded-full bg-primary/60"
+                      style={{ animation: `bounce 1.2s ease-in-out infinite`, animationDelay: `${d}s` }} />
                   ))}
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Input */}
-            <div className="p-4 border-t border-border">
-              <div className="flex items-center space-x-2">
-                <label className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer">
-                  <FontAwesomeIcon icon={faPaperclip} />
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.doc,.txt"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-                <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg hover:scale-110 active:scale-95 transition-all duration-300">
-                  <FontAwesomeIcon icon={faMicrophone} />
-                </button>
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Type your legal question here..."
-                  className="flex-1 px-4 py-2 bg-muted border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:scale-[1.02] transition-all duration-300"
-                />
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Suggested questions */}
+        {messages.length === 1 && (
+          <div className="px-4 md:px-8 lg:px-16 pb-3 flex-shrink-0">
+            <div className="flex items-center gap-2 mb-2.5">
+              <Sparkles className="w-3.5 h-3.5 text-secondary" />
+              <span className="text-xs font-medium text-muted-foreground">Suggested questions</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTIONS.map((q, i) => (
                 <button
-                  onClick={handleSend}
-                  className="p-3 bg-primary text-white rounded-lg hover:shadow-glow hover:scale-110 active:scale-95 transition-all duration-300 disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none"
-                  disabled={!input.trim()}
+                  key={i}
+                  onClick={() => setInput(q)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:text-primary text-muted-foreground transition-all duration-200 shadow-sm"
                 >
-                  <FontAwesomeIcon icon={faPaperPlane} className="hover:translate-x-1 transition-transform duration-300" />
+                  {q}
                 </button>
-              </div>
+              ))}
             </div>
           </div>
+        )}
+
+        {/* Input bar */}
+        <div className="px-4 md:px-8 lg:px-16 pb-5 pt-3 flex-shrink-0 border-t border-border/60 bg-card/50 backdrop-blur-sm">
+          <div className="flex items-end gap-2.5 bg-card rounded-2xl border border-border shadow-md px-3 py-2.5 focus-within:border-primary/40 focus-within:shadow-lg transition-all duration-200">
+            {/* Attach */}
+            <label className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/8 cursor-pointer transition-colors mb-0.5">
+              <Paperclip className="w-4 h-4" />
+              <input type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleFile} className="hidden" />
+            </label>
+
+            {/* Mic */}
+            <button className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors mb-0.5">
+              <Mic className="w-4 h-4" />
+            </button>
+
+            {/* Textarea */}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              rows={1}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder={t('chatbot.placeholder')}
+              className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none leading-relaxed py-1 max-h-40 overflow-y-auto"
+            />
+
+            {/* Send */}
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || isTyping}
+              className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center gradient-primary text-white shadow-sm hover:shadow-glow hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none transition-all duration-200 mb-0.5"
+            >
+              {isTyping
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" style={{ transform: 'translateX(1px)' }} />
+              }
+            </button>
+          </div>
+          <p className="text-center text-[10px] text-muted-foreground/50 mt-2">
+            AI-generated legal guidance · Always consult a qualified lawyer for advice
+          </p>
         </div>
       </div>
+
+      {/* Keyframes */}
+      <style>{`
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); }
+          30%            { transform: translateY(-5px); }
+        }
+      `}</style>
     </div>
   );
 };

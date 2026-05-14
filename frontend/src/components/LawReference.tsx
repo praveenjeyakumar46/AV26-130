@@ -161,7 +161,7 @@ const LawReference = () => {
               className="flex-1 px-4 py-2 bg-muted border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <button className="px-6 py-2 bg-primary text-white rounded-lg hover:shadow-glow transition-all duration-300">
-              {t('judgements.search')}
+              {t('laws.search')}
             </button>
           </div>
         </div>

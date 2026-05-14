@@ -12,7 +12,8 @@ If cuDNN still fails to load, add its versioned bin folder via WHISPER_EXTRA_DLL
 
 For reliable browser WebM, install ffmpeg and put it on PATH (used when PyAV yields empty text).
 
-Env: WHISPER_DEVICE=cuda|cpu (default cuda), WHISPER_COMPUTE_TYPE, WHISPER_EXTRA_DLL_DIRS (Windows ;-separated).
+Env: WHISPER_DEVICE=cuda|cpu (default cuda), WHISPER_MODEL (e.g. tiny, base, small, medium, large-v3),
+  WHISPER_COMPUTE_TYPE, WHISPER_EXTRA_DLL_DIRS (Windows ;-separated). CUDA uses the GPU; mic capture is 48 kHz in the browser (see frontend).
 """
 
 from __future__ import annotations
@@ -108,10 +109,12 @@ _compute_type = os.environ.get(
     "int8" if _whisper_device == "cpu" else "float16",
 ).strip()
 
+_model_id = os.environ.get("WHISPER_MODEL", "medium").strip() or "medium"
+
 from faster_whisper import WhisperModel  # noqa: E402
 
 try:
-    model = WhisperModel("medium", device=_whisper_device, compute_type=_compute_type)
+    model = WhisperModel(_model_id, device=_whisper_device, compute_type=_compute_type)
 except RuntimeError as e:
     err = str(e).lower()
     if _whisper_device == "cuda" and any(
@@ -127,12 +130,12 @@ except RuntimeError as e:
         )
         _whisper_device = "cpu"
         _compute_type = "int8"
-        model = WhisperModel("medium", device="cpu", compute_type="int8")
+        model = WhisperModel(_model_id, device="cpu", compute_type="int8")
     else:
         raise
 
 print(
-    f"Whisper model loaded: device={_whisper_device}, compute_type={_compute_type}",
+    f"Whisper model loaded: id={_model_id}, device={_whisper_device}, compute_type={_compute_type}",
     flush=True,
 )
 
@@ -260,7 +263,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         """Avoid 501 when the browser or a health probe opens the root URL."""
         if self.path.split("?", 1)[0].rstrip("/") in ("", "/"):
-            self._json(200, {"ok": True, "service": "faster-whisper", "usage": "POST multipart form field 'audio'"})
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "service": "faster-whisper",
+                    "model": _model_id,
+                    "device": _whisper_device,
+                    "usage": "POST multipart form field 'audio'",
+                },
+            )
             return
         self.send_response(404)
         self.send_header("Content-Type", "application/json")

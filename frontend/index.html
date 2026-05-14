@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LegalAI - Your Legal Guidance Platform</title>
-    <meta name="description" content="Modern legal guidance platform with AI chatbot, case judgements, and comprehensive law database" />
-    <meta name="author" content="LegalAI" />
+    <title>LexLearn Academy — Legal literacy & guided study</title>
+    <meta name="description" content="LexLearn Academy helps you study law with guided explanations, case readings, and constitutional reference tools—in one calm, focused workspace." />
+    <meta name="author" content="LexLearn Academy" />
 
-    <meta property="og:title" content="LegalAI - Your Legal Guidance Platform" />
-    <meta property="og:description" content="Modern legal guidance platform with AI chatbot, case judgements, and comprehensive law database" />
+    <meta property="og:title" content="LexLearn Academy — Legal education hub" />
+    <meta property="og:description" content="Study tracks, a guided assistant, case readings, and constitutional lookup—built for learners." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
 
@@ -17,10 +17,35 @@
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <!-- Google Website Translator (used by the in-app language buttons) -->
+    <style>
+      /* Hide Google's injected UI; we control language via our own buttons */
+      #google_translate_element { display: none; }
+      .goog-te-banner-frame.skiptranslate { display: none !important; }
+      body { top: 0px !important; }
+      .skiptranslate { display: none !important; }
+    </style>
   </head>
 
   <body>
+    <div id="google_translate_element"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Called by Google's script once loaded.
+      function googleTranslateElementInit() {
+        if (!window.google || !window.google.translate || !window.google.translate.TranslateElement) return;
+        new window.google.translate.TranslateElement(
+          {
+            pageLanguage: 'en',
+            includedLanguages: 'en,ta,kn',
+            autoDisplay: false
+          },
+          'google_translate_element'
+        );
+      }
+    </script>
+    <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
   </body>
 </html>

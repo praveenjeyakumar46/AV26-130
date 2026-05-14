@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Purple Envy Login (Static Demo)</title>
+  <style>
+    :root {
+      --bg: #0f0b1a;
+      --card: #181228;
+      --muted: #221a38;
+      --border: #2f2345;
+      --text: #f5f2ff;
+      --sub: #c7c1d8;
+      --primary: #8f5bff;
+      --primary-2: #c45bff;
+      --success: #3ccf91;
+      --danger: #ff5b7a;
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 20% 20%, rgba(143, 91, 255, 0.25), transparent 30%),
+                  radial-gradient(circle at 80% 0%, rgba(196, 91, 255, 0.2), transparent 30%),
+                  var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      padding: 24px;
+    }
+    .card {
+      width: min(960px, 100%);
+      background: linear-gradient(145deg, rgba(24, 18, 40, 0.9), rgba(17, 12, 29, 0.9));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px;
+      display: grid;
+      gap: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    @media (min-width: 900px) {
+      .card { grid-template-columns: 1.2fr 1fr; }
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--muted);
+      color: var(--sub);
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      letter-spacing: 0.2px;
+    }
+    h1 { margin: 8px 0 4px; font-size: 28px; }
+    p { margin: 0; color: var(--sub); line-height: 1.6; }
+    .pill-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+    .pill {
+      background: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      color: var(--sub);
+      font-size: 14px;
+    }
+    form {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #120d1f;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(143, 91, 255, 0.25);
+    }
+    .row {
+      display: grid;
+      gap: 12px;
+    }
+    .error {
+      color: var(--danger);
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 91, 122, 0.08);
+      border: 1px solid rgba(255, 91, 122, 0.25);
+    }
+    .success {
+      color: var(--success);
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(60, 207, 145, 0.08);
+      border: 1px solid rgba(60, 207, 145, 0.25);
+      word-break: break-all;
+    }
+    button {
+      width: 100%;
+      border: none;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      color: white;
+      box-shadow: 0 10px 35px rgba(143, 91, 255, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); box-shadow: 0 8px 25px rgba(143, 91, 255, 0.25); }
+    small { color: var(--sub); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="left">
+      <div class="badge">Purple Envy • Static Demo</div>
+      <h1>Secure Login</h1>
+      <p>Use this static HTML as a starting point. Hook the submit handler to your real backend later.</p>
+      <div class="pill-grid" style="margin-top:16px;">
+        <div class="pill">Admin: admin@legalai.local</div>
+        <div class="pill">Password: Admin123!</div>
+        <div class="pill">Demo: demo@example.com</div>
+        <div class="pill">Password: changeme123</div>
+      </div>
+      <p style="margin-top:12px;font-size:13px;">Currently runs fully client-side. Add your own fetch/axios call in the script below.</p>
+    </div>
+    <div class="right">
+      <form id="login-form">
+        <div>
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" placeholder="you@example.com" value="admin@legalai.local" required />
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" placeholder="••••••••" value="Admin123!" required />
+        </div>
+        <div class="row" id="messages"></div>
+        <button type="submit">Sign in</button>
+        <small>This is a placeholder form. Replace the JS with a real API call when ready.</small>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const messages = document.getElementById('messages');
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = form.email.value.trim();
+      const password = form.password.value.trim();
+      messages.innerHTML = '';
+
+      // Dummy validation: accept admin/demo, otherwise show error.
+      const isAdmin = email.toLowerCase() === 'admin@legalai.local' && password === 'Admin123!';
+      const isDemo = email.toLowerCase() === 'demo@example.com' && password === 'changeme123';
+
+      if (isAdmin || isDemo) {
+        const token = `${isAdmin ? 'admin' : 'demo'}-token-${email}-${Date.now()}`;
+        const div = document.createElement('div');
+        div.className = 'success';
+        div.textContent = `Logged in! Token: ${token}`;
+        messages.appendChild(div);
+      } else {
+        const div = document.createElement('div');
+        div.className = 'error';
+        div.textContent = 'Invalid credentials (demo accepts admin/demo accounts shown on the left).';
+        messages.appendChild(div);
+      }
+    });
+  </script>
+</body>
+</html>
+

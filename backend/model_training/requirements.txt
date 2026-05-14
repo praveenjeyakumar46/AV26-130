@@ -1,0 +1,14 @@
+# requirements.txt — model_training
+# Install: pip install -r requirements.txt
+# On Windows, always run scripts via the .bat launchers (they set PYTHONUTF8=1)
+
+torch>=2.2.0
+transformers>=4.44.0
+trl>=0.9.0
+peft>=0.11.0
+datasets>=2.20.0
+accelerate>=0.30.0
+bitsandbytes>=0.43.0
+sentencepiece
+protobuf
+einops

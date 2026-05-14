@@ -1,59 +1,76 @@
+/* Tamil Font Support - @import must come first */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/*
+  Royal Aurora Palette — light mode only
+  #3E2F5B  →  deep violet-purple   (primary brand)
+  #E94560  →  coral-rose red       (accent / CTA)
+  White + soft tints of the palette for surfaces
 */
 
 @layer base {
   :root {
-    --background: 200 20% 98%;
-    --foreground: 200 15% 12%;
+    /* ── Surfaces ── */
+    --background:   270 15% 98%;          /* near-white with a whisper of violet */
+    --foreground:   270 40% 14%;          /* deep purple-charcoal for text */
 
-    --card: 0 0% 100%;
-    --card-foreground: 200 15% 12%;
+    --card:         0 0% 100%;            /* pure white cards */
+    --card-foreground: 270 40% 14%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 200 15% 12%;
+    --popover:      0 0% 100%;
+    --popover-foreground: 270 40% 14%;
 
-    --primary: 173 80% 45%;
+    /* ── Brand colours ── */
+    /* Primary  =  #3E2F5B  →  hsl(270 32% 27%) */
+    --primary:           270 32% 27%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 173 80% 55%;
+    --primary-glow:       270 38% 38%;
 
-    --secondary: 158 64% 52%;
+    /* Secondary / accent  =  #E94560  →  hsl(349 79% 59%) */
+    --secondary:           349 79% 59%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 200 13% 91%;
-    --muted-foreground: 200 9% 46%;
+    --muted:         270 20% 94%;         /* very light lavender-white */
+    --muted-foreground: 270 20% 42%;
 
-    --accent: 43 96% 56%;
+    --accent:        349 79% 59%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
+    --destructive:   0 72% 58%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 158 64% 52%;
+    --success:       142 55% 42%;
     --success-foreground: 0 0% 100%;
 
-    --border: 200 13% 91%;
-    --input: 200 13% 91%;
-    --ring: 173 80% 45%;
+    --border:        270 20% 88%;
+    --input:         270 20% 91%;
+    --ring:          270 32% 27%;
 
     --radius: 0.75rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(173, 80%, 45%), hsl(158, 64%, 52%));
-    --gradient-hero: linear-gradient(135deg, hsl(173, 80%, 40%) 0%, hsl(158, 64%, 48%) 100%);
-    --gradient-card: linear-gradient(135deg, hsl(173, 80%, 90%) 0%, hsl(158, 64%, 85%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(43, 96%, 56%), hsl(173, 80%, 45%));
-    
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-    --shadow-glow: 0 0 25px hsl(173 80% 45% / 0.4);
+    /* ── Gradients (Aurora: purple → rose) ── */
+    --gradient-primary: linear-gradient(135deg, hsl(270 32% 27%), hsl(349 79% 59%));
+    --gradient-hero:    linear-gradient(135deg, hsl(270 32% 27%) 0%, hsl(349 79% 59%) 100%);
+    --gradient-card:    linear-gradient(135deg, hsl(270 30% 97%) 0%, hsl(349 60% 97%) 100%);
+    --gradient-accent:  linear-gradient(135deg, hsl(349 79% 59%), hsl(270 32% 27%));
+
+    /* ── Shadows ── */
+    --shadow-sm:  0 1px 2px 0 rgb(62 47 91 / 0.06);
+    --shadow-md:  0 4px 6px -1px rgb(62 47 91 / 0.10), 0 2px 4px -2px rgb(62 47 91 / 0.08);
+    --shadow-lg:  0 10px 15px -3px rgb(62 47 91 / 0.12), 0 4px 6px -4px rgb(62 47 91 / 0.08);
+    --shadow-xl:  0 20px 25px -5px rgb(62 47 91 / 0.14), 0 8px 10px -6px rgb(62 47 91 / 0.08);
+    --shadow-glow: 0 0 28px hsl(349 79% 59% / 0.30);
 
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Force light mode — no dark class behaviour */
+  html, html.dark {
+    color-scheme: light;
   }
 }
 
@@ -65,6 +82,24 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground font-sans;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  /* Apply Tamil font when language is Tamil */
+  html[lang="ta"] body {
+    font-family: 'Noto Sans Tamil', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  html[lang="ta"] {
+    font-feature-settings: "kern" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html[lang="ta"] p,
+  html[lang="ta"] span,
+  html[lang="ta"] div {
+    line-height: 1.8;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -90,24 +125,21 @@ All colors MUST be HSL.
   }
 
   .glass-effect {
-    background: rgba(255, 255, 255, 0.9);
+    background: hsla(var(--card) / 0.90);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid hsla(var(--border) / 0.8);
+    box-shadow: var(--shadow-md);
   }
 
   .animate-shimmer {
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
   }
 
   @keyframes shimmer {
-    0% {
-      background-position: -200% 0;
-    }
-    100% {
-      background-position: 200% 0;
-    }
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
   }
 
   .animate-scale-in {
@@ -115,14 +147,8 @@ All colors MUST be HSL.
   }
 
   @keyframes scale-in {
-    from {
-      transform: scale(0.9);
-      opacity: 0;
-    }
-    to {
-      transform: scale(1);
-      opacity: 1;
-    }
+    from { transform: scale(0.9); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
   }
 
   .animate-bounce-in {
@@ -130,20 +156,10 @@ All colors MUST be HSL.
   }
 
   @keyframes bounce-in {
-    0% {
-      transform: scale(0.3);
-      opacity: 0;
-    }
-    50% {
-      transform: scale(1.05);
-    }
-    70% {
-      transform: scale(0.9);
-    }
-    100% {
-      transform: scale(1);
-      opacity: 1;
-    }
+    0%   { transform: scale(0.3); opacity: 0; }
+    50%  { transform: scale(1.05); }
+    70%  { transform: scale(0.9); }
+    100% { transform: scale(1);   opacity: 1; }
   }
 
   .hover-lift {
@@ -151,8 +167,8 @@ All colors MUST be HSL.
   }
 
   .hover-lift:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgb(62 47 91 / 0.15);
   }
 
   .animate-typing {
@@ -160,20 +176,20 @@ All colors MUST be HSL.
   }
 
   @keyframes typing {
-    from {
-      width: 0;
-    }
-    to {
-      width: 100%;
-    }
+    from { width: 0; }
+    to   { width: 100%; }
   }
 
   @keyframes blink-caret {
-    from, to {
-      border-color: transparent;
-    }
-    50% {
-      border-color: orange;
-    }
+    from, to { border-color: transparent; }
+    50%      { border-color: hsl(349 79% 59%); }
+  }
+
+  /* Background law motifs — gentle drift */
+  @keyframes law-float-drift {
+    0%,  100% { transform: translate(0, 0); }
+    25%        { transform: translate(14px, -20px); }
+    50%        { transform: translate(-10px, -12px); }
+    75%        { transform: translate(-16px, 16px); }
   }
 }

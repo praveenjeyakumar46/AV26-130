@@ -34,6 +34,9 @@ export interface LawSection {
   popular?: boolean;
   match_score?: number;
   matched_fields?: string[];
+  // Additional fields from uploaded datasets
+  article_id?: string;
+  article_desc?: string;
 }
 
 export interface CategoryDetails {
@@ -288,18 +291,26 @@ export async function downloadSectionPDF(section: LawSection): Promise<void> {
   // This would require a backend endpoint to generate PDFs
   console.log('Download PDF for section:', section.Section);
   // For now, create a simple text download
+  // Prefer normalized fields (Section/Title/Description), but fall back to article fields
+  const title = section.Title || section.article_id || section.Section || '';
+  const description = section.Description || section.article_desc || '';
+  const act = section.Act || '';
+  const punishment = section.Punishment || '';
+  const bailable = section.Bailable || '';
+  const cognizable = section.Cognizable || '';
+
   const content = `
-${section.Section} - ${section.Title}
-Act: ${section.Act}
+${title}
+Act: ${act}
 
 Description:
-${section.Description}
+${description}
 
 Punishment:
-${section.Punishment}
+${punishment}
 
-Bailable: ${section.Bailable}
-Cognizable: ${section.Cognizable}
+Bailable: ${bailable}
+Cognizable: ${cognizable}
 `;
   
   const blob = new Blob([content], { type: 'text/plain' });

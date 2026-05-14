@@ -1,0 +1,136 @@
+================================================================
+CONSTITUTION DATA LOADING GUIDE
+================================================================
+
+This guide explains how to load the Constitution of India datasets
+into your Supabase database for use in the Legal AI application.
+
+================================================================
+AVAILABLE DATASETS
+================================================================
+
+1. COI.json (Location: backend/database/data/COI.json)
+   - Structured Constitution data with detailed article information
+   - Includes clauses, sub-clauses, explanations, and part information
+   - Loaded into: constitution_structured table
+
+2. Final_IC.csv (Location: backend/database/data/Final_IC.csv)
+   - Constitution articles in CSV format
+   - Simple format: article_id, article_desc
+   - Loaded into: constitution_articles table
+
+================================================================
+PREREQUISITES
+================================================================
+
+1. Ensure you have a Supabase account and project set up
+2. Configure your .env file with:
+   - SUPABASE_URL=your_supabase_url
+   - SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+3. Run database migrations first to create tables:
+   - Execute the SQL migrations in backend/database/migrations/
+   - Tables needed: constitution_structured, constitution_articles, constitution_parts
+
+================================================================
+LOADING DATA
+================================================================
+
+Option 1: Load All Datasets (Recommended)
+------------------------------------------
+npm run db:load-all
+
+This will load both COI.json and Final_IC.csv into Supabase.
+
+
+Option 2: Load Individual Datasets
+-----------------------------------
+# Load only CSV data
+npm run db:load-csv
+
+# Load only JSON data
+npm run db:load-json
+
+
+Option 3: Manual Loading
+-------------------------
+# Load CSV
+node database/scripts/load_constitution_csv.js
+
+# Load JSON
+node database/scripts/load_constitution_json.js
+
+================================================================
+DATA ACCESS IN APPLICATION
+================================================================
+
+Once loaded, the data is accessible through:
+
+1. Backend API Endpoints:
+   - GET /api/constitution/articles (with pagination & search)
+   - GET /api/law-reference/articles (same as above)
+
+2. Frontend Component:
+   - ConstitutionReference.tsx automatically fetches and displays data
+   - Located at: frontend/src/components/ConstitutionReference.tsx
+
+3. Service Layer:
+   - constitutionService.ts provides functions for querying data
+   - Located at: backend/src/services/constitutionService.ts
+
+================================================================
+DATA MERGING & DEDUPLICATION
+================================================================
+
+The system intelligently merges data from both sources:
+- Structured data (COI.json) is prioritized for complete information
+- CSV data fills gaps for articles not in structured format
+- No duplicate articles appear in the frontend
+- Articles are sorted numerically (1, 2, 2A, 3, etc.)
+
+================================================================
+VERIFICATION
+================================================================
+
+After loading data, verify by:
+
+1. Check Supabase Dashboard:
+   - Go to Table Editor
+   - Check constitution_articles table (should have ~395 rows)
+   - Check constitution_structured table (should have ~395 rows)
+
+2. Test API:
+   curl http://localhost:3000/api/constitution/articles?page=1&limit=10
+
+3. Test Frontend:
+   - Navigate to Constitution section in the UI
+   - Search for articles (e.g., "Article 1", "fundamental rights")
+   - Verify pagination works
+
+================================================================
+TROUBLESHOOTING
+================================================================
+
+Issue: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+Solution: Ensure .env file is configured with valid credentials
+
+Issue: "JSON file not found" or "CSV file not found"
+Solution: Verify files exist in backend/database/data/
+
+Issue: "Error inserting articles"
+Solution: Check that database tables are created (run migrations first)
+
+Issue: "Duplicate key error"
+Solution: Data may already be loaded. The scripts use upsert, so re-running is safe.
+
+================================================================
+NOTES
+================================================================
+
+- Data loading is idempotent (safe to run multiple times)
+- Uses upsert operations (inserts new, updates existing)
+- Batch processing for efficient loading
+- Handles errors gracefully with detailed logging
+- Both datasets are required for full functionality
+
+================================================================

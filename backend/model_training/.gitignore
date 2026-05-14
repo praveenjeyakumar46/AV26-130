@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Model files (too large for git)
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# Training outputs
+training_data/
+runs/
+logs/
+*.log
+
+# Results
+inference_results.json
+evaluation_results.json
+
+# System files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Weights & Biases
+wandb/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
