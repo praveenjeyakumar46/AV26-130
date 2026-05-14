@@ -83,7 +83,8 @@ const Chatbot = () => {
   };
 
   const loadCurId = (): string | null => {
-    try { return sessionStorage.getItem(CUR_ID_KEY) || null; } catch { return null; }
+    // Always start with no active conversation
+    return null;
   };
 
   const welcomeMsg = (): Message => ({
@@ -93,12 +94,7 @@ const Chatbot = () => {
   });
 
   const loadMsgs = (): Message[] => {
-    const cid = loadCurId();
-    if (cid) { const m = loadConvMsgs(cid); if (m) return m; }
-    try {
-      const s = sessionStorage.getItem(CHAT_KEY);
-      if (s) { const m = JSON.parse(s).filter((x: Message) => x.content || x.type === 'legal_sections'); if (m.length) return m; }
-    } catch {}
+    // Always start fresh — chatbot resets on every section visit
     return [welcomeMsg()];
   };
 
@@ -396,7 +392,7 @@ const Chatbot = () => {
     const cleaned = (msg.content || '').replace(/\*\*/g, '');
     const paras   = cleaned.split('\n').filter(l => l.trim());
     return (
-      <div className="space-y-1.5 text-[0.9rem] leading-relaxed text-foreground">
+      <div className="space-y-1.5 text-[0.95rem] leading-relaxed text-foreground">
         {paras.map((p, i) => <p key={i}>{p}</p>)}
       </div>
     );
@@ -639,7 +635,7 @@ const Chatbot = () => {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
               placeholder={t('chatbot.placeholder')}
-              className="flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none leading-relaxed py-1 max-h-40 overflow-y-auto"
+              className="flex-1 resize-none bg-transparent text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none leading-relaxed py-1.5 max-h-40 overflow-y-auto"
             />
 
             {/* Send */}
@@ -654,9 +650,7 @@ const Chatbot = () => {
               }
             </button>
           </div>
-          <p className="text-center text-[10px] text-muted-foreground/50 mt-2">
-            AI-generated legal guidance · Always consult a qualified lawyer for advice
-          </p>
+
         </div>
       </div>
 

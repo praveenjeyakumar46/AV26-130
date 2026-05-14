@@ -6,6 +6,7 @@ import chatRoutes from './chatRoutes';
 import constitutionRoutes from './constitutionRoutes';
 import uploadRoutes from './uploadRoutes';
 import judgementRoutes from './judgementRoutes';
+import lmsRoutes from './lmsRoutes';
 import { env } from '../config/env';
 
 const router = Router();
@@ -31,6 +32,9 @@ router.use('/api/upload', uploadRoutes);
 
 // Judgement routes
 router.use('/api/judgements', judgementRoutes);
+
+// LexLearn Pro — LMS AI Tutor route
+router.use('/api/lms', lmsRoutes);
 
 // Versioned API mount
 router.use(`/api/${env.API_VERSION}`, apiRouter);

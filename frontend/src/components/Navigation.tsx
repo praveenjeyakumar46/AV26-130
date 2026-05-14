@@ -6,9 +6,10 @@ import {
   User,
   X,
   GraduationCap,
+  Scale,
+  BookOpen,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import logoImage from '@/assets/nyria-logo.png';
 
 interface NavigationProps {
   activeSection: string;
@@ -22,6 +23,7 @@ const Navigation = ({ activeSection, onNavigate }: NavigationProps) => {
   const navItems = [
     { id: 'home',         label: t('nav.home'),         Icon: GraduationCap },
     { id: 'chatbot',      label: t('nav.assistant'),    Icon: Bot },
+    { id: 'lms',          label: 'LexLearn Pro',        Icon: BookOpen },
     { id: 'constitution', label: t('nav.constitution'), Icon: Landmark },
     { id: 'profile',      label: t('nav.profile'),      Icon: User },
   ] as const;
@@ -32,14 +34,15 @@ const Navigation = ({ activeSection, onNavigate }: NavigationProps) => {
         <div className="flex items-center justify-between h-14 sm:h-16">
           <button
             type="button"
-            className="flex items-center gap-2 group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex items-center gap-2.5 group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => onNavigate('home')}
           >
-            <img
-              src={logoImage}
-              alt={t('nav.brandLogoAlt')}
-              className="h-9 w-auto sm:h-10 transition-transform duration-300 group-hover:scale-[1.02]"
-            />
+            <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shadow-sm group-hover:shadow-glow transition-shadow duration-300">
+              <Scale className="w-5 h-5 text-white" strokeWidth={1.75} />
+            </div>
+            <span className="font-bold text-lg tracking-tight text-foreground group-hover:text-primary transition-colors duration-200">
+              Nyria
+            </span>
           </button>
 
           {/* Desktop nav */}

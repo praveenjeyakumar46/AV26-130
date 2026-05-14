@@ -4,13 +4,18 @@ import Hero from '@/components/Hero';
 import Chatbot from '@/components/Chatbot';
 import ConstitutionReference from '@/components/ConstitutionReference';
 import Profile from '@/components/Profile';
+import LegalLMS from '@/components/LegalLMS';
 import PageBackground from '@/components/PageBackground';
 import FloatingLawMotifs from '@/components/FloatingLawMotifs';
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState('home');
+  const [chatbotKey, setChatbotKey] = useState(0);
 
   const handleNavigate = (section: string) => {
+    if (section === 'chatbot') {
+      setChatbotKey(k => k + 1); // force new chat on every visit
+    }
     setActiveSection(section);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -20,9 +25,11 @@ const Index = () => {
       case 'home':
         return <Hero onNavigate={handleNavigate} />;
       case 'chatbot':
-        return <Chatbot />;
+        return <Chatbot key={chatbotKey} />;
       case 'constitution':
         return <ConstitutionReference />;
+      case 'lms':
+        return <LegalLMS />;
       case 'profile':
         return <Profile />;
       default:

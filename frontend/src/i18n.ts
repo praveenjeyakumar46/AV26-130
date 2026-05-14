@@ -40,6 +40,16 @@ const resources = {
           constitutionTitle: "Constitution",
           constitutionDesc: "Browse articles and provisions of the Indian Constitution",
         },
+        learningTracksTitle: "Learning Tracks",
+        learningTracksSubtitle: "Structured paths to deepen your legal knowledge",
+        aboutTitle: "About Nyria",
+        aboutBody: "Nyria is an AI-powered legal guidance platform built to make Indian law accessible to everyone — not just legal professionals. We combine advanced AI with structured legal content to empower citizens with knowledge, clarity, and confidence.",
+        aboutCard1Title: "AI-Powered Legal Guidance",
+        aboutCard1Desc: "Our AI assistant is trained on Indian laws, acts, and landmark judgments to give you accurate, context-aware answers in seconds — available 24/7.",
+        aboutCard2Title: "Complete Legal Reference",
+        aboutCard2Desc: "Browse the full Indian Constitution, IPC, CrPC, and other major legal codes with powerful search, article summaries, and easy navigation.",
+        aboutCard3Title: "Built for Citizens",
+        aboutCard3Desc: "Nyria is designed for everyday Indians — students, professionals, and citizens who need clear legal information without the jargon or the cost of a consultation.",
       },
 
       // Chatbot Section
@@ -263,6 +273,16 @@ const resources = {
           constitutionTitle: "அரசியலமைப்பு",
           constitutionDesc: "இந்திய அரசியலமைப்பின் பிரிவுகள் மற்றும் விதிகளை உலாவவும்",
         },
+        learningTracksTitle: "கற்றல் பாதைகள்",
+        learningTracksSubtitle: "சட்ட அறிவை ஆழப்படுத்த கட்டமைக்கப்பட்ட பாதைகள்",
+        aboutTitle: "Nyria பற்றி",
+        aboutBody: "Nyria என்பது இந்தியச் சட்டத்தை அனைவருக்கும் — சட்ட நிபுணர்களுக்கு மட்டுமல்ல — எளிதாக்க உருவாக்கப்பட்ட AI இயங்கும் சட்ட வழிகாட்டி தளம்.",
+        aboutCard1Title: "AI சட்ட வழிகாட்டல்",
+        aboutCard1Desc: "எங்கள் AI உதவியாளர் இந்திய சட்டங்கள் மற்றும் தீர்ப்புகளில் பயிற்சி பெற்றது — 24/7 துல்லியமான பதில்கள் வழங்குகிறது.",
+        aboutCard2Title: "முழுமையான சட்ட குறிப்பு",
+        aboutCard2Desc: "இந்திய அரசியலமைப்பு, IPC, CrPC மற்றும் பிற சட்டங்களை வலுவான தேடல் மூலம் உலாவவும்.",
+        aboutCard3Title: "குடிமக்களுக்காக உருவாக்கப்பட்டது",
+        aboutCard3Desc: "Nyria மாணவர்கள், நிபுணர்கள் மற்றும் சாதாரண குடிமக்களுக்காக வடிவமைக்கப்பட்டுள்ளது — சட்ட தகவல்களை எளிமையாக வழங்குகிறது.",
       },
 
       // Chatbot Section - உரையாடல் உதவியாளர்
@@ -467,17 +487,17 @@ i18n
 
 export function setLanguage(lang: string) {
   i18n.changeLanguage(lang);
-  try { 
-    localStorage.setItem("lang", lang); 
+  try {
+    localStorage.setItem("lang", lang);
     // Set document language attribute for better accessibility
-    if (typeof document !== 'undefined') {
+    if (typeof document !== "undefined") {
       document.documentElement.lang = lang;
     }
   } catch {}
 }
 
 // Set initial language attribute
-if (typeof document !== 'undefined') {
+if (typeof document !== "undefined") {
   document.documentElement.lang = i18n.language;
 }
 
