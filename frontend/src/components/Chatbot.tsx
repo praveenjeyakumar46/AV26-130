@@ -354,7 +354,7 @@ const Chatbot = () => {
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
           ...(data.summary ? [{
             id: `${Date.now()}-s`, role: 'bot' as const, type: 'summary' as const,
-            content: `**${t('chatbot.summary')}:** ${data.summary}\n\n💡 ${t('chatbot.askAboutDocument')}`,
+            content: `${t('chatbot.summary')}: ${data.summary}\n\n💡 ${t('chatbot.askAboutDocument')}`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }] : []),
         ]);
@@ -389,8 +389,13 @@ const Chatbot = () => {
       );
     }
 
-    const cleaned = (msg.content || '').replace(/\*\*/g, '');
-    const paras   = cleaned.split('\n').filter(l => l.trim());
+    const cleaned = (msg.content || '')
+      .replace(/^#{1,6}\s+/gm, '')        // ### headings
+      .replace(/\*\*(.+?)\*\*/g, '$1')    // **bold**
+      .replace(/\*(.+?)\*/g, '$1')        // *italic*
+      .replace(/`(.+?)`/g, '$1')          // `code`
+      .replace(/^[-*]\s+/gm, '• ');       // bullet dashes → •
+    const paras = cleaned.split('\n').filter(l => l.trim());
     return (
       <div className="space-y-1.5 text-[0.95rem] leading-relaxed text-foreground">
         {paras.map((p, i) => <p key={i}>{p}</p>)}

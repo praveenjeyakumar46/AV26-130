@@ -6,7 +6,6 @@
 import logger from '../config/logger';
 import { generateResponse } from './ollamaService';
 import fs from 'fs';
-import path from 'path';
 
 // In-memory storage for document contexts (in production, use a database)
 const documentContexts: Map<string, {
@@ -24,32 +23,60 @@ async function extractTextFromFile(filePath: string, mimeType: string): Promise<
   try {
     const fileContent = fs.readFileSync(filePath);
 
-    // Handle different file types
+    // Plain text
     if (mimeType === 'text/plain' || filePath.endsWith('.txt')) {
       return fileContent.toString('utf-8');
-    } else if (mimeType === 'application/pdf' || filePath.endsWith('.pdf')) {
-      // For PDF, we'll need pdf-parse library
-      // For now, return a placeholder - you'll need to install pdf-parse
-      logger.warn('PDF parsing not fully implemented. Install pdf-parse package.');
-      return 'PDF content extraction requires pdf-parse package. Please install it.';
-    } else if (
+    }
+
+    // PDF — use pdf-parse
+    if (mimeType === 'application/pdf' || filePath.endsWith('.pdf')) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(fileContent);
+      if (!data.text || data.text.trim().length === 0) {
+        throw new Error('PDF appears to be scanned or image-based and contains no extractable text.');
+      }
+      return data.text;
+    }
+
+    // DOCX — use mammoth
+    if (
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       filePath.endsWith('.docx')
     ) {
-      // For DOCX, we'll need mammoth library
-      logger.warn('DOCX parsing not fully implemented. Install mammoth package.');
-      return 'DOCX content extraction requires mammoth package. Please install it.';
-    } else if (mimeType === 'application/msword' || filePath.endsWith('.doc')) {
-      logger.warn('DOC parsing not fully implemented.');
-      return 'DOC file format requires additional library. Please convert to DOCX or PDF.';
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ path: filePath });
+      if (result.messages && result.messages.length > 0) {
+        logger.warn('Mammoth warnings while reading DOCX:', result.messages);
+      }
+      return result.value;
     }
 
-    // Fallback: try to read as text
+    // Legacy .doc
+    if (mimeType === 'application/msword' || filePath.endsWith('.doc')) {
+      throw new Error('Legacy .doc format is not supported. Please convert your file to .docx or .pdf and try again.');
+    }
+
+    // Fallback: attempt raw UTF-8 read
     return fileContent.toString('utf-8');
   } catch (error) {
     logger.error('Error extracting text from file:', error);
-    throw new Error('Failed to extract text from document');
+    throw error instanceof Error ? error : new Error('Failed to extract text from document');
   }
+}
+
+/**
+ * Strip markdown syntax and return clean plain text
+ */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')   // remove heading markers (###, ##, #)
+    .replace(/\*\*(.+?)\*\*/g, '$1') // **bold** → bold
+    .replace(/\*(.+?)\*/g, '$1')     // *italic* → italic
+    .replace(/`(.+?)`/g, '$1')       // `code` → code
+    .replace(/^[-*]\s+/gm, '')       // leading bullet dashes
+    .trim();
 }
 
 /**
@@ -61,40 +88,44 @@ async function generateDocumentAnalysis(documentText: string): Promise<{
   keyPoints: string[];
 }> {
   try {
-    const analysisPrompt = `You are a legal document analyst. Analyze the following legal document and provide:
+    const analysisPrompt = `You are a legal document analyst. Analyze the following legal document.
 
-1. A concise summary (2-3 sentences)
-2. A detailed analysis covering:
-   - Main legal issues or topics
-   - Key provisions or clauses
-   - Important dates, parties, or obligations
-   - Potential legal implications
-3. Key points to remember
+Respond in plain sentences only — do NOT use markdown, headers, bullet symbols, or hashtags.
+
+Provide:
+SUMMARY: Two or three plain sentences summarising the document.
+ANALYSIS: A detailed paragraph covering the main legal issues, key provisions, important parties or dates, and legal implications.
+KEY POINTS: List up to five important points, each on its own line starting with a dash (-).
 
 Document content:
-${documentText.substring(0, 8000)}${documentText.length > 8000 ? '... (truncated)' : ''}
-
-Provide your analysis in a clear, structured format.`;
+${documentText.substring(0, 8000)}${documentText.length > 8000 ? '... (truncated)' : ''}`;
 
     const analysisResponse = await generateResponse(analysisPrompt);
-    const analysis = analysisResponse || 'Unable to generate analysis.';
+    const raw = analysisResponse || 'Unable to generate analysis.';
 
-    // Extract summary (first paragraph)
-    const summary = analysis.split('\n\n')[0] || analysis.substring(0, 200);
+    // Parse SUMMARY section
+    const summaryMatch = raw.match(/SUMMARY[:\s]+([\s\S]+?)(?=ANALYSIS[:\s]+|KEY POINTS[:\s]+|$)/i);
+    const rawSummary = summaryMatch ? summaryMatch[1].trim() : raw.split('\n\n')[0] || raw.substring(0, 300);
+    const summary = stripMarkdown(rawSummary);
 
-    // Extract key points (look for bullet points or numbered lists)
+    // Parse ANALYSIS section
+    const analysisMatch = raw.match(/ANALYSIS[:\s]+([\s\S]+?)(?=KEY POINTS[:\s]+|$)/i);
+    const analysis = stripMarkdown(analysisMatch ? analysisMatch[1].trim() : raw.trim());
+
+    // Parse KEY POINTS section
+    const keyPointsMatch = raw.match(/KEY POINTS[:\s]+([\s\S]+?)$/i);
     const keyPoints: string[] = [];
-    const lines = analysis.split('\n');
-    for (const line of lines) {
-      if (line.match(/^[-•*]\s/) || line.match(/^\d+\.\s/)) {
-        keyPoints.push(line.replace(/^[-•*\d.\s]+/, '').trim());
-      }
+    if (keyPointsMatch) {
+      keyPointsMatch[1].split('\n').forEach(line => {
+        const cleaned = stripMarkdown(line.replace(/^[-•*\d.\s]+/, '').trim());
+        if (cleaned) keyPoints.push(cleaned);
+      });
     }
 
     return {
-      summary: summary.trim(),
-      analysis: analysis.trim(),
-      keyPoints: keyPoints.length > 0 ? keyPoints : [analysis.substring(0, 100) + '...']
+      summary,
+      analysis,
+      keyPoints: keyPoints.length > 0 ? keyPoints : [summary],
     };
   } catch (error) {
     logger.error('Error generating document analysis:', error);
