@@ -33,21 +33,39 @@ export default defineConfig(({ mode }) => ({
           });
         },
       },
+
+      // ── Auth routes (/auth/login, /auth/signup, /auth/me, /auth/verify)
+      "/auth": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, res) => {
+            if (res && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                success: false, 
+                error: 'Auth service unavailable' 
+              }));
+            }
+          });
+        },
+      },
+
       "/extract-keywords": {
         target: "http://localhost:3000",
         changeOrigin: true,
         secure: false,
       },
+
       "/health": {
         target: "http://localhost:3000",
         changeOrigin: true,
         secure: false,
-        ws: false, // Disable WebSocket for health endpoint
-        timeout: 2000, // 2 second timeout
+        ws: false,
+        timeout: 2000,
         configure: (proxy, _options) => {
-          // Suppress all proxy errors - backend may not be running
-          proxy.on('error', (err, _req, res) => {
-            // Silently handle all connection errors
+          proxy.on('error', (_err, _req, res) => {
             if (res && !res.headersSent) {
               res.writeHead(503, { 
                 'Content-Type': 'application/json',
@@ -61,16 +79,11 @@ export default defineConfig(({ mode }) => ({
                 message: 'Backend service unavailable' 
               }));
             }
-            // Don't log the error - it's expected when backend is not running
           });
-          
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            // Set timeout to prevent hanging
+          proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setTimeout(2000);
           });
-          
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            // Add CORS headers to successful responses
+          proxy.on('proxyRes', (proxyRes) => {
             proxyRes.headers['Access-Control-Allow-Origin'] = '*';
           });
         },

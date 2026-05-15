@@ -48,8 +48,8 @@ const resources = {
         aboutCard1Desc: "Our AI assistant is trained on Indian laws, acts, and landmark judgments to give you accurate, context-aware answers in seconds — available 24/7.",
         aboutCard2Title: "Complete Legal Reference",
         aboutCard2Desc: "Browse the full Indian Constitution, IPC, CrPC, and other major legal codes with powerful search, article summaries, and easy navigation.",
-        aboutCard3Title: "Built for Citizens",
-        aboutCard3Desc: "Nyria is designed for everyday Indians — students, professionals, and citizens who need clear legal information without the jargon or the cost of a consultation.",
+        aboutCard3Title: "Built for Students",
+        aboutCard3Desc: "Nyria is designed for law students and learners — helping you understand Indian law clearly, study smarter, and build confidence without the jargon or the cost of a consultation.",
       },
 
       // Chatbot Section
@@ -74,7 +74,6 @@ const resources = {
         summary: "Summary",
         answer: "Answer",
         section: "Section",
-        title: "Title",
         description: "Description",
         punishment: "Punishment",
         act: "Act",
@@ -307,7 +306,6 @@ const resources = {
         summary: "சுருக்கம்",
         answer: "பதில்",
         section: "பிரிவு",
-        title: "தலைப்பு",
         description: "விளக்கம்",
         punishment: "தண்டனை",
         act: "சட்டம்",

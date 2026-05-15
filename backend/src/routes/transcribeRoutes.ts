@@ -1,3 +1,14 @@
-// REMOVED: Transcription feature removed in project-hari merge.
-// This file is intentionally empty. The route is no longer registered in routes/index.ts.
-export {};
+/**
+ * Transcribe Routes
+ * POST /api/transcribe  – accepts audio file (field: "audio"), returns { text }
+ */
+
+import { Router } from 'express';
+import { audioUpload, transcribeAudio } from '../controllers/transcribeController';
+import { uploadLimiter } from '../middleware/rateLimiter';
+
+const router = Router();
+
+router.post('/', uploadLimiter, audioUpload.single('audio'), transcribeAudio);
+
+export default router;

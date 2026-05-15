@@ -116,10 +116,13 @@ const Chatbot = () => {
   const [currentConvId,      setCurrentConvId]      = useState<string | null>(loadCurId);
   const [isFirstInput,       setIsFirstInput]       = useState(loadFirstInput);
   const [sidebarOpen,        setSidebarOpen]        = useState(true);
+  const [isRecording,        setIsRecording]        = useState(false);
 
   const messagesEndRef    = useRef<HTMLDivElement>(null);
   const abortRef          = useRef<AbortController | null>(null);
   const textareaRef       = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
+  const audioChunksRef    = useRef<Blob[]>([]);
 
   /* ── Effects ──────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -325,6 +328,61 @@ const Chatbot = () => {
     } finally {
       setIsTyping(false);
       abortRef.current = null;
+    }
+  };
+
+  /* ── Mic / voice recording ───────────────────────────────────────── */
+  const handleMicClick = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setIsRecording(false);
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size === 0) return;
+        setIsTyping(true);
+        try {
+          const fd = new FormData();
+          const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('wav') ? 'wav' : 'audio';
+          fd.append('audio', blob, `recording.${ext}`);
+          fd.append('language', i18n.language || 'en');
+          const base = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? '' : 'http://localhost:3000');
+          const res  = await fetch(`${base}/api/transcribe`, { method: 'POST', body: fd });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (data.success && data.text) {
+            setInput(prev => (prev ? prev + ' ' : '') + data.text);
+          } else if (!data.success) {
+            throw new Error(data.error || 'Transcription failed');
+          }
+        } catch (err: any) {
+          setMessages(p => [...p, {
+            id: `${Date.now()}-err`, role: 'bot', type: 'text',
+            content: `⚠️ ${err?.message || 'Transcription error. Make sure whisper_server.py is running.'}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }]);
+        } finally {
+          setIsTyping(false);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch (err: any) {
+      setMessages(p => [...p, {
+        id: `${Date.now()}-err`, role: 'bot', type: 'text',
+        content: `⚠️ Microphone error: ${err?.message || err}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
     }
   };
 
@@ -628,7 +686,15 @@ const Chatbot = () => {
             </label>
 
             {/* Mic */}
-            <button className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/8 transition-colors mb-0.5">
+            <button
+              onClick={handleMicClick}
+              title={isRecording ? 'Stop recording' : 'Start voice input'}
+              className={`flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-colors mb-0.5
+                ${isRecording
+                  ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
+                  : 'text-muted-foreground hover:text-primary hover:bg-primary/8'
+                }`}
+            >
               <Mic className="w-4 h-4" />
             </button>
 

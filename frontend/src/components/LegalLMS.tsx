@@ -3,7 +3,7 @@ import {
   BookOpen, Search, Filter, ChevronRight, ArrowLeft,
   FileText, Bot, Send, Upload, X, Loader2, Sparkles,
   GraduationCap, Clock, ChevronDown,
-  Zap, Library, Brain, Globe,
+  Zap, Library,
   Download, Eye, ExternalLink,
 } from 'lucide-react';
 
@@ -450,14 +450,7 @@ function RagTutor({ course, doc, onBack }: { course: Course; doc: CourseDoc; onB
             <Zap className="w-3 h-3" /> RAG Active
           </span>
         )}
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors shrink-0"
-        >
-          <Upload className="w-3.5 h-3.5" /> Upload PDF
-        </button>
-        <input ref={fileRef} type="file" accept=".pdf" className="hidden"
-          onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+
       </header>
 
       {/* ── Messages ── */}
@@ -465,7 +458,12 @@ function RagTutor({ course, doc, onBack }: { course: Course; doc: CourseDoc; onB
         className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-16 py-6 space-y-6 relative"
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; f && handleFile(f); }}
+        onDrop={e => {
+          e.preventDefault();
+          setDragOver(false);
+          const f = e.dataTransfer.files[0];
+          if (f) handleFile(f);
+        }}
       >
         {dragOver && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary rounded-xl">
@@ -576,14 +574,6 @@ function RagTutor({ course, doc, onBack }: { course: Course; doc: CourseDoc; onB
       {/* ── Input bar — identical to Chatbot ── */}
       <div className="px-4 md:px-8 lg:px-16 pb-5 pt-3 shrink-0 border-t border-border/60 bg-card/50 backdrop-blur-sm">
         <div className="flex items-end gap-2.5 bg-card rounded-2xl border border-border shadow-md px-3 py-2.5 focus-within:border-primary/40 focus-within:shadow-lg transition-all duration-200">
-
-          {/* Attach (PDF) */}
-          <label className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/8 cursor-pointer transition-colors mb-0.5"
-            title="Upload PDF for RAG mode">
-            <Upload className="w-4 h-4" />
-            <input type="file" accept=".pdf" className="hidden"
-              onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          </label>
 
           {/* Auto-grow textarea */}
           <textarea
@@ -697,7 +687,7 @@ function DocReader({ course, doc, onBack, onOpenTutor }: {
 
       {/* AI Tutor CTA */}
       <button onClick={onOpenTutor}
-        className="w-full gradient-primary text-white py-4 rounded-xl font-semibold text-base flex items-center justify-center gap-2 hover:shadow-glow transition-shadow">
+        className="w-full gradient-primary text-white py-4 rounded-xl font-semibold text-base flex items-center justify-center gap-2 hover:shadow-glow transition-shadow mb-6">
         <Bot className="w-5 h-5" /> Open AI Tutor for this Module
       </button>
 
@@ -893,7 +883,6 @@ type View =
 
 export default function LegalLMS() {
   const [view, setView] = useState<View>({ type: 'library' });
-  const [tab,  setTab]  = useState<'courses' | 'tutor'>('courses');
 
   const goLibrary = () => setView({ type: 'library' });
   const goCourse  = (course: Course) => setView({ type: 'course', course });
@@ -913,56 +902,5 @@ export default function LegalLMS() {
       onOpenDoc={(doc, openTutor) => openTutor ? goTutor(view.course, doc) : goReader(view.course, doc)} />
   );
 
-  return (
-    <div>
-      <div className="border-b border-border bg-card/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-1 h-12">
-            {[
-              { id: 'courses', label: 'Course Library', icon: <Library className="w-4 h-4" /> },
-              { id: 'tutor',   label: 'AI Tutor',       icon: <Brain  className="w-4 h-4" /> },
-            ].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id as 'courses' | 'tutor')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  tab === t.id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'}`}>
-                {t.icon}{t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {tab === 'courses' && <CourseLibrary onSelectCourse={goCourse} />}
-
-      {tab === 'tutor' && (
-        <div className="max-w-2xl mx-auto px-4 py-12 text-center">
-          <div className="w-20 h-20 rounded-3xl gradient-primary flex items-center justify-center mx-auto mb-6 shadow-lg">
-            <Bot className="w-10 h-10 text-white" />
-          </div>
-          <h2 className="text-2xl font-bold text-foreground mb-3">AI RAG Tutor</h2>
-          <p className="text-muted-foreground mb-8 leading-relaxed">
-            Select a document from any course to open the AI Tutor. Upload your own PDF to enable RAG mode for document-grounded answers.
-          </p>
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            {[
-              { icon: <Sparkles className="w-4 h-4" />, label: 'Knowledge Mode',    desc: "Chat using Claude's legal expertise" },
-              { icon: <Zap      className="w-4 h-4" />, label: 'RAG Mode',          desc: 'Upload a PDF for document-grounded answers' },
-              { icon: <Bot      className="w-4 h-4" />, label: 'Chatbot-Style UI',  desc: 'Animated bubbles, timestamps & typing dots' },
-              { icon: <Globe    className="w-4 h-4" />, label: 'Law Book PDFs',     desc: 'Preview & download law books directly' },
-            ].map(f => (
-              <div key={f.label} className="rounded-xl border border-border bg-card p-4 text-left">
-                <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center text-white mb-2">{f.icon}</div>
-                <p className="font-semibold text-sm text-foreground">{f.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-          <button onClick={() => setTab('courses')}
-            className="gradient-primary text-white px-8 py-3 rounded-xl font-semibold hover:shadow-glow transition-shadow">
-            Browse Courses to Get Started
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  return <CourseLibrary onSelectCourse={goCourse} />;
 }
