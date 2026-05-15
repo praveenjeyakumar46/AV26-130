@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Send, Paperclip, Mic, Bot, User, Plus, Trash2, X,
   Scale, MessageSquare, Clock, ChevronRight, Sparkles,
-  AlertCircle, Wifi, WifiOff, Loader2,
+  AlertCircle, Wifi, WifiOff, Loader2, Volume2, VolumeX,
 } from 'lucide-react';
+import { useSpeech } from '@/hooks/useSpeech';
 import { checkHealth } from '@/lib/api';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
@@ -117,6 +118,8 @@ const Chatbot = () => {
   const [isFirstInput,       setIsFirstInput]       = useState(loadFirstInput);
   const [sidebarOpen,        setSidebarOpen]        = useState(true);
   const [isRecording,        setIsRecording]        = useState(false);
+
+  const { speak, stop, isSpeaking, isSupported: ttsSupported, speakingId } = useSpeech();
 
   const messagesEndRef    = useRef<HTMLDivElement>(null);
   const abortRef          = useRef<AbortController | null>(null);
@@ -630,7 +633,20 @@ const Chatbot = () => {
                     {renderContent(msg)}
                   </div>
                 )}
-                <span className="text-[10px] text-muted-foreground/60 mt-1 px-1">{msg.timestamp}</span>
+                <div className="flex items-center gap-1.5 mt-1 px-1">
+                  <span className="text-[10px] text-muted-foreground/60">{msg.timestamp}</span>
+                  {msg.role === 'bot' && ttsSupported && msg.content && (
+                    <button
+                      onClick={() => speak(msg.content, { id: msg.id } as any)}
+                      title={speakingId === msg.id ? 'Stop reading' : 'Read aloud'}
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-primary hover:bg-primary/8 transition-colors"
+                    >
+                      {speakingId === msg.id
+                        ? <VolumeX className="w-3 h-3" />
+                        : <Volume2 className="w-3 h-3" />}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
