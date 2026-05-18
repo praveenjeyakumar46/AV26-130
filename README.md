@@ -24,6 +24,7 @@
 9. [Database Schema](#9-database-schema)
 10. [API Reference](#10-api-reference)
 11. [Getting Started](#11-getting-started)
+    - [System Dependencies (Poppler, Tesseract, FFmpeg)](#system-dependencies-poppler-tesseract-ffmpeg)
 12. [Environment Variables](#12-environment-variables)
 13. [Deployment](#13-deployment)
 14. [Roadmap](#14-roadmap)
@@ -311,6 +312,8 @@ Supports English and Tamil. Falls back from CUDA to CPU automatically if the GPU
 | FastAPI + uvicorn | Whisper HTTP sidecar |
 | Anthropic Claude API | LMS tutor (optional, premium backend) |
 | FFmpeg | Audio conversion for Whisper |
+| Poppler (`poppler-utils`) | PDF → image conversion (used by OCR scripts via `pdf2image`) |
+| Tesseract OCR | Optical character recognition for scanned / Tamil PDFs |
 
 ### Database
 
@@ -574,9 +577,154 @@ All API routes are prefixed with `/api`. Authentication is via `Authorization: B
 
 - **Node.js** 20+
 - **Python** 3.11+
-- **FFmpeg** (required for Whisper audio conversion)
 - **Ollama** installed and running
 - **Supabase** project (free tier is fine)
+- **FFmpeg** — required for voice input (Whisper sidecar)
+- **Poppler** — required for Tamil/scanned PDF OCR (`ocr_tamil_pdf.py`)
+- **Tesseract OCR** (+ Tamil language pack) — required for OCR scripts
+
+See [System Dependencies](#system-dependencies-poppler-tesseract-ffmpeg) below for install steps on Windows, macOS, and Linux.
+
+### System Dependencies (Poppler, Tesseract, FFmpeg)
+
+These are **system-level tools** (not npm packages). Install only what you need:
+
+| Tool | Used for | Required when |
+|---|---|---|
+| **Poppler** | Converts PDF pages to images (`pdf2image`) | Running `ocr_tamil_pdf.py`, scanned PDF OCR |
+| **Tesseract** | Reads text from images (OCR) | Tamil Constitution OCR, scanned PDFs |
+| **FFmpeg** | Converts microphone audio to 16 kHz mono WAV | Voice input in chatbot (`whisper_server.py`) |
+
+---
+
+#### Poppler
+
+**What it does in this project**
+
+Poppler provides command-line utilities such as `pdftoppm` and `pdfinfo`. The script `backend/ocr_tamil_pdf.py` uses the Python package `pdf2image`, which calls Poppler under the hood to turn each PDF page into an image before Tesseract runs OCR. If Poppler is missing or not on your `PATH`, you may see errors like:
+
+`Unable to get page count. Is poppler installed and in PATH?`
+
+**Install**
+
+| OS | Command / steps |
+|---|---|
+| **Ubuntu / Debian** | `sudo apt update && sudo apt install -y poppler-utils` |
+| **Fedora** | `sudo dnf install -y poppler-utils` |
+| **macOS** | `brew install poppler` |
+| **Windows** | 1. Download a Poppler build for Windows (e.g. [poppler-windows releases](https://github.com/oschwartz10612/poppler-windows/releases)).<br>2. Extract to a folder such as `C:\poppler`.<br>3. Add the `bin` folder (e.g. `C:\poppler\Library\bin`) to your system **PATH**.<br>4. Open a new terminal and run `pdftoppm -h` to confirm. |
+
+**Verify**
+
+```bash
+pdftoppm -h
+# or
+pdfinfo -v
+```
+
+**Python packages** (for OCR scripts only):
+
+```bash
+cd backend
+pip install pdf2image pillow pytesseract
+```
+
+---
+
+#### Tesseract OCR
+
+**What it does in this project**
+
+Tesseract extracts text from images. The platform uses it mainly via `backend/ocr_tamil_pdf.py` to convert legacy-encoded or scanned **Tamil Constitution PDFs** into Unicode text (`constitution_tamil_unicode.txt`). That file is then used by the Constitution loader and training pipelines. For **English and Tamil** scanned uploads, Tesseract with the `tam` language pack is required.
+
+**Install**
+
+| OS | Command / steps |
+|---|---|
+| **Ubuntu / Debian** | `sudo apt install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-tam` |
+| **Fedora** | `sudo dnf install -y tesseract tesseract-langpack-eng tesseract-langpack-tam` |
+| **macOS** | `brew install tesseract tesseract-lang` |
+| **Windows** | 1. Install from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki).<br>2. During setup, enable **Additional script data** and select **Tamil**.<br>3. Default path: `C:\Program Files\Tesseract-OCR\tesseract.exe` — ensure this folder is on **PATH**, or the script will try common paths automatically. |
+
+**Verify**
+
+```bash
+tesseract --version
+tesseract --list-langs
+# tam and eng should appear in the list
+```
+
+**Usage (Tamil Constitution OCR)**
+
+```bash
+cd backend
+pip install pytesseract pillow pdf2image
+
+python ocr_tamil_pdf.py \
+  --input database/data/constitution_tamil.pdf \
+  --output database/data/constitution_tamil_unicode.txt \
+  --dpi 300
+```
+
+Optional: limit pages while testing: `--pages 1-10`.
+
+---
+
+#### FFmpeg (for Whisper voice input)
+
+**What it does in this project**
+
+The Whisper sidecar (`backend/whisper_server.py`) accepts audio from the chatbot microphone. Before `faster-whisper` transcribes it, **FFmpeg** converts the upload to **16 kHz mono WAV** (required format for the model). If FFmpeg is missing, voice input returns an error: `FFmpeg not found. Install FFmpeg and add it to PATH.`
+
+Flow: **Browser records audio** → `POST /api/transcribe` (Node) → `whisper_server.py` → **FFmpeg** → **faster-whisper** → text back to chat.
+
+**Install**
+
+| OS | Command / steps |
+|---|---|
+| **Ubuntu / Debian** | `sudo apt install -y ffmpeg` |
+| **Fedora** | `sudo dnf install -y ffmpeg` |
+| **macOS** | `brew install ffmpeg` |
+| **Windows** | `winget install Gyan.FFmpeg` — or install from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin` folder to **PATH**. |
+
+**Verify**
+
+```bash
+ffmpeg -version
+```
+
+**Optional:** if FFmpeg is installed but not on `PATH`, set:
+
+```bash
+# Linux / macOS
+export FFMPEG_PATH=/full/path/to/ffmpeg
+
+# Windows (PowerShell)
+$env:FFMPEG_PATH = "C:\path\to\ffmpeg.exe"
+```
+
+**Whisper Python dependencies**
+
+```bash
+cd backend
+pip install faster-whisper fastapi uvicorn[standard] python-multipart
+python whisper_server.py
+# Listens on http://127.0.0.1:9000 by default
+```
+
+Optional environment variables for the Whisper sidecar:
+
+| Variable | Default | Description |
+|---|---|---|
+| `WHISPER_MODEL` | `base` | Model size: `base`, `small`, `medium`, `large-v3` |
+| `WHISPER_DEVICE` | `cpu` | `cpu` or `cuda` (GPU) |
+| `WHISPER_COMPUTE_TYPE` | `int8` (CPU) | `int8`, `float16`, `float32` |
+| `PORT` | `9000` | HTTP port for the sidecar |
+| `FFMPEG_PATH` | `ffmpeg` | Full path if `ffmpeg` is not on PATH |
+
+Set `WHISPER_URL=http://127.0.0.1:9000` in `backend/.env` so the Node backend can reach the sidecar.
+
+---
 
 ### Step 1 — Clone the repository
 
@@ -621,11 +769,16 @@ ollama pull qwen2.5:3b
 
 ### Step 4 — Start the Whisper speech-to-text sidecar (optional)
 
+Requires **FFmpeg** on your PATH (see [FFmpeg](#ffmpeg-for-whisper-voice-input) above).
+
 ```bash
 cd backend
 
 # Install Python dependencies
 pip install faster-whisper fastapi uvicorn[standard] python-multipart
+
+# Confirm FFmpeg is available
+ffmpeg -version
 
 # Start the Whisper server (runs on port 9000)
 python whisper_server.py
